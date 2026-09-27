@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Janisol-pariovi</title>
+    <link rel="stylesheet" href="ovi3d.css">
+</head>
+<body>
+    <div class="cosmos" aria-hidden="true">
+        <svg class="stars" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+            <g fill="#fff">
+                <circle cx="86" cy="64" r="1.1" opacity="0.75"/>
+                <circle cx="210" cy="128" r="0.7" opacity="0.4"/>
+                <circle cx="340" cy="48" r="1.3" opacity="0.55"/>
+                <circle cx="468" cy="156" r="0.6" opacity="0.35"/>
+                <circle cx="590" cy="72" r="0.9" opacity="0.6"/>
+                <circle cx="724" cy="118" r="0.5" opacity="0.3"/>
+                <circle cx="860" cy="42" r="1.2" opacity="0.5"/>
+                <circle cx="980" cy="150" r="0.7" opacity="0.45"/>
+                <circle cx="1124" cy="68" r="1" opacity="0.65"/>
+                <circle cx="1288" cy="132" r="0.6" opacity="0.35"/>
+                <circle cx="1436" cy="54" r="1.15" opacity="0.55"/>
+                <circle cx="1520" cy="168" r="0.5" opacity="0.28"/>
+                <circle cx="140" cy="240" r="0.6" opacity="0.32"/>
+                <circle cx="310" cy="286" r="1" opacity="0.5"/>
+                <circle cx="520" cy="248" r="0.55" opacity="0.3"/>
+                <circle cx="690" cy="310" r="0.8" opacity="0.42"/>
+                <circle cx="910" cy="230" r="1.2" opacity="0.48"/>
+                <circle cx="1080" cy="292" r="0.5" opacity="0.26"/>
+                <circle cx="1260" cy="214" r="0.9" opacity="0.55"/>
+                <circle cx="1470" cy="268" r="0.65" opacity="0.34"/>
+                <circle cx="64" cy="390" r="0.8" opacity="0.4"/>
+                <circle cx="248" cy="430" r="0.5" opacity="0.25"/>
+                <circle cx="430" cy="360" r="1.05" opacity="0.52"/>
+                <circle cx="640" cy="410" r="0.6" opacity="0.3"/>
+                <circle cx="820" cy="348" r="0.75" opacity="0.38"/>
+                <circle cx="1010" cy="430" r="1.1" opacity="0.46"/>
+                <circle cx="1190" cy="370" r="0.5" opacity="0.28"/>
+                <circle cx="1380" cy="420" r="0.85" opacity="0.4"/>
+                <circle cx="1548" cy="340" r="0.55" opacity="0.32"/>
+                <circle cx="120" cy="520" r="1" opacity="0.45"/>
+                <circle cx="300" cy="560" r="0.55" opacity="0.28"/>
+                <circle cx="480" cy="500" r="0.7" opacity="0.36"/>
+                <circle cx="760" cy="540" r="1.15" opacity="0.5"/>
+                <circle cx="940" cy="580" r="0.5" opacity="0.24"/>
+                <circle cx="1140" cy="510" r="0.8" opacity="0.42"/>
+                <circle cx="1320" cy="560" r="0.6" opacity="0.3"/>
+                <circle cx="1500" cy="500" r="1" opacity="0.48"/>
+                <circle cx="180" cy="680" r="0.65" opacity="0.34"/>
+                <circle cx="400" cy="720" r="1.05" opacity="0.5"/>
+                <circle cx="620" cy="660" r="0.5" opacity="0.26"/>
+                <circle cx="860" cy="710" r="0.8" opacity="0.4"/>
+                <circle cx="1060" cy="650" r="0.55" opacity="0.3"/>
+                <circle cx="1240" cy="740" r="1.1" opacity="0.46"/>
+                <circle cx="1450" cy="680" r="0.6" opacity="0.32"/>
+                <circle cx="90" cy="820" r="0.7" opacity="0.35"/>
+                <circle cx="280" cy="850" r="0.5" opacity="0.22"/>
+                <circle cx="540" cy="800" r="0.9" opacity="0.42"/>
+                <circle cx="780" cy="840" r="0.55" opacity="0.28"/>
+                <circle cx="980" cy="790" r="1" opacity="0.44"/>
+                <circle cx="1180" cy="850" r="0.6" opacity="0.3"/>
+                <circle cx="1360" cy="800" r="0.75" opacity="0.36"/>
+                <circle cx="1540" cy="830" r="0.5" opacity="0.24"/>
+            </g>
+        </svg>
+    </div>
+    <main>
+        <header>
+            <h1>Jansen Janisol -pariovi</h1>
+            <p>Syötä oviaukko muodossa 15x23 tai mitat millimetreinä. Malli päivittyy heti ja sitä voi pyörittää.</p>
+        </header>
+        <div class="studio">
+            <form id="mitat" autocomplete="off">
+                <label>Oviaukko
+                    <input id="oviaukko" type="text" placeholder="15x23" spellcheck="false" autocapitalize="off">
+                    <span class="vihje">15x23 on aukko 1500×2300 mm. Oven mitta on 20 mm pienempi molemmissa suunnissa.</span>
+                </label>
+                <label>Käyntioven valoaukko<input id="kaynti" type="number" min="80" step="1" value="795"></label>
+                <label>Lisäoven valoaukko<input id="lisa" type="number" min="80" step="1" value="265"></label>
+                <label>Valoaukon korkeus<input id="valoH" type="number" min="80" step="1" value="1875"></label>
+                <label>Oven leveys<input id="leveys" type="number" min="1000" step="1" value="1480"></label>
+                <label>Oven korkeus<input id="korkeus" type="number" min="800" step="1" value="2310"></label>
+                <label>Potkupellin korkeus<input id="potku" type="number" min="40" step="1" value="300"></label>
+                <div class="vari-rivi">
+                    <label>Oven väri<input id="vari" type="color" value="#4e5049"></label>
+                    <label>RAL<input id="ral" inputmode="numeric" maxlength="4" placeholder="7022" value="7022"></label>
+                </div>
+                <p id="virhe" hidden></p>
+            </form>
+            <div id="nakyma"></div>
+        </div>
+    </main>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="ovi3d.js?v=31"></script>
+</body>
+</html>

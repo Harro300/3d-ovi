@@ -1,0 +1,234 @@
+:root {
+    color: #f4f5f7;
+    background: #07080c;
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #07080c;
+    letter-spacing: -0.011em;
+}
+
+.cosmos {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 72% 58% at 8% 14%, rgba(108, 76, 148, 0.28), transparent 58%),
+        radial-gradient(ellipse 48% 42% at 94% 86%, rgba(32, 58, 112, 0.34), transparent 52%),
+        radial-gradient(ellipse 36% 28% at 72% 8%, rgba(255, 255, 255, 0.045), transparent 60%),
+        #07080c;
+}
+
+.stars {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.cosmos::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 42%, transparent 28%, rgba(0, 0, 0, 0.58) 100%);
+}
+
+main {
+    position: relative;
+    z-index: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 36px 40px 32px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    margin-bottom: 28px;
+}
+
+h1 {
+    margin: 0 0 8px;
+    font-size: clamp(1.7rem, 2.4vw, 2.15rem);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1.15;
+    color: #f7f7f8;
+}
+
+header p {
+    margin: 0;
+    max-width: 36rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    letter-spacing: 0;
+}
+
+.studio {
+    display: grid;
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 28px;
+    align-items: stretch;
+    flex: 1;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-self: start;
+    margin: 0;
+    padding: 22px 20px 20px;
+    border-radius: 22px;
+    background: rgba(16, 18, 24, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.48);
+}
+
+input {
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: #f4f5f7;
+    padding: 11px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color-scheme: dark;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+}
+
+input:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.46);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+input[readonly] {
+    color: rgba(244, 245, 247, 0.55);
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.08);
+    cursor: default;
+}
+
+input[readonly]:hover,
+input[readonly]:focus {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.vihje {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.38);
+}
+
+input[type="color"] {
+    height: 44px;
+    padding: 5px;
+    cursor: pointer;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 8px;
+}
+
+.vari-rivi {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.vari-rivi label:first-child {
+    flex: 0 0 84px;
+}
+
+.vari-rivi label:last-child {
+    flex: 1;
+    min-width: 0;
+}
+
+#virhe {
+    margin: 2px 0 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: #f6d7cc;
+    background: rgba(92, 36, 28, 0.45);
+    border: 1px solid rgba(255, 176, 150, 0.22);
+    font-size: 0.85rem;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+
+#nakyma {
+    height: max(72vh, 480px);
+    min-height: 480px;
+    background: transparent;
+    overflow: hidden;
+}
+
+#nakyma canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+@media (max-width: 900px) {
+    main {
+        padding: 24px 16px 28px;
+    }
+
+    .studio {
+        grid-template-columns: 1fr;
+        gap: 18px;
+    }
+
+    header {
+        margin-bottom: 18px;
+    }
+}
