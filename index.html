@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Janisol-pariovi</title>
+    <title>Jansen Janisol</title>
     <link rel="stylesheet" href="ovi3d.css">
 </head>
 <body>
@@ -67,17 +67,43 @@
     </div>
     <main>
         <header>
-            <h1>Jansen Janisol -pariovi</h1>
+            <h1>Jansen Janisol</h1>
             <p>Syötä oviaukko muodossa 15x23 tai mitat millimetreinä. Malli päivittyy heti ja sitä voi pyörittää.</p>
         </header>
         <div class="studio">
             <form id="mitat" autocomplete="off">
                 <label>Oviaukko
                     <input id="oviaukko" type="text" placeholder="15x23" spellcheck="false" autocapitalize="off">
-                    <span class="vihje">15x23 on aukko 1500×2300 mm. Oven mitta on 20 mm pienempi molemmissa suunnissa.</span>
+                    <span class="vihje">15x23 on aukko 1500×2300 mm. Oven mitta on 20 mm pienempi molemmissa suunnissa. Kirjain o tai v korkeuden perään valitsee kätisyyden.</span>
                 </label>
+                <div class="tyyppi-kentta">
+                    <span class="tyyppi-otsikko">Ovi</span>
+                    <div class="tyyppi-valinta" role="radiogroup" aria-label="Ovi">
+                        <label class="tyyppi-nappi">
+                            <input type="radio" name="tyyppi" value="kayntiovi">
+                            <span>Käyntiovi</span>
+                        </label>
+                        <label class="tyyppi-nappi">
+                            <input type="radio" name="tyyppi" value="pariovi" checked>
+                            <span>Pariovi</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="tyyppi-kentta">
+                    <span class="tyyppi-otsikko">Kätisyys</span>
+                    <div class="tyyppi-valinta" role="radiogroup" aria-label="Kätisyys">
+                        <label class="tyyppi-nappi">
+                            <input type="radio" name="katisyys" value="oikea" checked>
+                            <span>Oikea</span>
+                        </label>
+                        <label class="tyyppi-nappi">
+                            <input type="radio" name="katisyys" value="vasen">
+                            <span>Vasen</span>
+                        </label>
+                    </div>
+                </div>
                 <label>Käyntioven valoaukko<input id="kaynti" type="number" min="80" step="1" value="795"></label>
-                <label>Lisäoven valoaukko<input id="lisa" type="number" min="80" step="1" value="265"></label>
+                <label id="lisaLabel">Lisäoven valoaukko<input id="lisa" type="number" min="80" step="1" value="265"></label>
                 <label>Valoaukon korkeus<input id="valoH" type="number" min="80" step="1" value="1875"></label>
                 <label>Oven leveys<input id="leveys" type="number" min="1000" step="1" value="1480"></label>
                 <label>Oven korkeus<input id="korkeus" type="number" min="800" step="1" value="2310"></label>
@@ -99,6 +125,6 @@
         }
     }
     </script>
-    <script type="module" src="ovi3d.js?v=31"></script>
+    <script type="module" src="ovi3d.js?v=35"></script>
 </body>
 </html>

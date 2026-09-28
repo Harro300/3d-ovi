@@ -7,12 +7,14 @@ const PUITE = 87.5;
 const PUITE_LISA = 62.5;
 const RAKO = 5;
 const W_PARI = 420;
+const W_KAYNTI = 265;
 const H_POTKU = 135;
 const KICK_MIN = 40;
 const GLASS_MIN = 80;
 const MODULE = 100;
 const OPENING_GAP = 20;
-const MIN_WIDTH_MODULE = 13;
+const MIN_PAIR_MODULE = 13;
+const MIN_SINGLE_MODULE = 5;
 const KAYNTI_LOCK_MIN = 695;
 const KAYNTI_LOCK_MAX = 895;
 const SYVYYS = 60;
@@ -35,7 +37,45 @@ const $ = (id) => document.getElementById(id);
 let syncing = false;
 let ralError = "";
 let openingError = "";
+let typeError = "";
 let openingLock = null;
+
+function doorType() {
+    const picked = document.querySelector('input[name="tyyppi"]:checked');
+    return picked ? picked.value : "pariovi";
+}
+
+function isPair() {
+    return doorType() === "pariovi";
+}
+
+function setDoorType(value) {
+    const input = document.querySelector('input[name="tyyppi"][value="' + value + '"]');
+    if (input) input.checked = true;
+    syncLisa();
+}
+
+function hand() {
+    const picked = document.querySelector('input[name="katisyys"]:checked');
+    return picked && picked.value === "vasen" ? "vasen" : "oikea";
+}
+
+function setHand(value) {
+    const input = document.querySelector('input[name="katisyys"][value="' + value + '"]');
+    if (input) input.checked = true;
+}
+
+function syncOpeningHand() {
+    const s = $("oviaukko").value.trim().replace(/\s+/g, "").replace(/×/g, "x").toLowerCase();
+    const match = s.match(/^(\d+)x(\d+)[ov]$/);
+    if (!match) return;
+    const next = Number(match[1]) + "x" + Number(match[2]) + (hand() === "vasen" ? "v" : "o");
+    if ($("oviaukko").value !== next) $("oviaukko").value = next;
+}
+
+function syncLisa() {
+    $("lisaLabel").hidden = !isPair();
+}
 
 function num(id) {
     const n = Number(String($(id).value).replace(",", "."));
@@ -105,8 +145,11 @@ function heightRanges(korkeus) {
 }
 
 function setLockedBounds(locked) {
+    const pair = isPair();
     $("leveys").readOnly = locked;
     $("korkeus").readOnly = locked;
+    $("kaynti").readOnly = locked && !pair;
+    $("leveys").min = pair ? "1000" : String(W_KAYNTI + GLASS_MIN);
     if (!locked) {
         setBound("kaynti", GLASS_MIN, null);
         setBound("lisa", GLASS_MIN, null);
@@ -114,31 +157,36 @@ function setLockedBounds(locked) {
         setBound("potku", KICK_MIN, null);
         return;
     }
-    const wr = widthRanges(openingLock.leveys);
     const hr = heightRanges(openingLock.korkeus);
-    setBound("kaynti", wr.kayntiMin, wr.kayntiMax);
-    setBound("lisa", wr.lisaMin, wr.lisaMax);
     setBound("potku", hr.potkuMin, hr.potkuMax);
     setBound("valoH", hr.valoMin, hr.valoMax);
+    if (!pair) return;
+    const wr = widthRanges(openingLock.leveys);
+    setBound("kaynti", wr.kayntiMin, wr.kayntiMax);
+    setBound("lisa", wr.lisaMin, wr.lisaMax);
 }
 
 function parseOpening(raw) {
     const s = String(raw).trim().replace(/\s+/g, "").replace(/×/g, "x").toLowerCase();
     if (s === "") return { state: "empty" };
-    const complete = s.match(/^(\d+)x(\d+)$/);
+    const complete = s.match(/^(\d+)x(\d+)([ov])?$/);
     if (!complete) {
         if (/^\d+$/.test(s) || /^\d+x$/.test(s) || /^\d+x\d*$/.test(s)) return { state: "partial" };
-        return { state: "invalid", message: "Oviaukon muoto on esim. 15x23." };
+        return { state: "invalid", message: "Oviaukon muoto on esim. 15x23 tai 15x23v." };
     }
     const wMod = Number(complete[1]);
     const hMod = Number(complete[2]);
-    if (wMod < MIN_WIDTH_MODULE) {
-        return { state: "invalid", message: "Oviaukon leveys on vähintään 13 (1300 mm)." };
+    if (wMod < MIN_SINGLE_MODULE) {
+        return { state: "invalid", message: "Oviaukon leveys on vähintään 5 (500 mm)." };
     }
     const leveys = wMod * MODULE - OPENING_GAP;
     const korkeus = hMod * MODULE - OPENING_GAP;
-    if (widthRanges(leveys).kayntiMax < KAYNTI_LOCK_MIN) {
+    const pair = wMod >= MIN_PAIR_MODULE;
+    if (pair && widthRanges(leveys).kayntiMax < KAYNTI_LOCK_MIN) {
         return { state: "invalid", message: "Oviaukko on liian kapea käyntiovelle ja lisäovelle." };
+    }
+    if (!pair && leveys - W_KAYNTI < GLASS_MIN) {
+        return { state: "invalid", message: "Oviaukko on liian kapea käyntiovelle." };
     }
     if (heightRanges(korkeus).potkuMax < KICK_MIN) {
         return {
@@ -147,16 +195,41 @@ function parseOpening(raw) {
             shortHeight: complete[2].length < 2
         };
     }
-    return { state: "ok", wMod, hMod, leveys, korkeus, canonical: wMod + "x" + hMod };
+    const handName = complete[3] === "v" ? "vasen" : complete[3] === "o" ? "oikea" : null;
+    const canonical = wMod + "x" + hMod + (handName === "vasen" ? "v" : handName === "oikea" ? "o" : "");
+    return { state: "ok", wMod, hMod, leveys, korkeus, pair, hand: handName, canonical };
+}
+
+function splitPair(leveys) {
+    const wr = widthRanges(leveys);
+    let kaynti = num("kaynti");
+    let lisa = num("lisa");
+    if (kaynti != null && inRange(kaynti, wr.kayntiMin, wr.kayntiMax)) {
+        kaynti = Math.round(kaynti);
+        lisa = leveys - W_PARI - kaynti;
+    } else if (lisa != null && inRange(Math.round(lisa), wr.lisaMin, wr.lisaMax)) {
+        lisa = Math.round(lisa);
+        kaynti = leveys - W_PARI - lisa;
+    } else {
+        if (kaynti == null) kaynti = wr.kayntiMin;
+        kaynti = Math.round(clamp(kaynti, wr.kayntiMin, wr.kayntiMax));
+        lisa = leveys - W_PARI - kaynti;
+    }
+    return { kaynti, lisa };
 }
 
 function applyOpening(parsed) {
-    const wr = widthRanges(parsed.leveys);
     const hr = heightRanges(parsed.korkeus);
-    let kaynti = num("kaynti");
-    if (kaynti == null) kaynti = wr.kayntiMin;
-    kaynti = Math.round(clamp(kaynti, wr.kayntiMin, wr.kayntiMax));
-    const lisa = parsed.leveys - W_PARI - kaynti;
+    setDoorType(parsed.pair ? "pariovi" : "kayntiovi");
+    if (parsed.hand) setHand(parsed.hand);
+    let kaynti;
+    if (parsed.pair) {
+        const split = splitPair(parsed.leveys);
+        kaynti = split.kaynti;
+        setNum("lisa", split.lisa);
+    } else {
+        kaynti = parsed.leveys - W_KAYNTI;
+    }
 
     let potku = num("potku");
     if (potku == null) potku = KICK_MIN;
@@ -171,7 +244,6 @@ function applyOpening(parsed) {
     setNum("leveys", parsed.leveys);
     setNum("korkeus", parsed.korkeus);
     setNum("kaynti", kaynti);
-    setNum("lisa", lisa);
     setNum("potku", potku);
     setNum("valoH", valoH);
     openingLock = {
@@ -190,8 +262,10 @@ function clearLock() {
 
 function applyOpeningInput(commit) {
     const parsed = parseOpening($("oviaukko").value);
+    typeError = "";
     if (parsed.state === "empty") {
         openingError = "";
+        typeError = "";
         clearLock();
         return;
     }
@@ -208,15 +282,58 @@ function applyOpeningInput(commit) {
         return;
     }
     openingError = "";
+    typeError = "";
     if ($("oviaukko").value !== parsed.canonical) $("oviaukko").value = parsed.canonical;
     applyOpening(parsed);
 }
 
+function applyTypeChange() {
+    if (isPair() && openingLock && openingLock.wMod < MIN_PAIR_MODULE) {
+        setDoorType("kayntiovi");
+        typeError = "Parioven oviaukon leveys on vähintään 13 (1300 mm).";
+        return;
+    }
+    typeError = "";
+    syncLisa();
+    if (openingLock) {
+        applyOpening({
+            wMod: openingLock.wMod,
+            hMod: openingLock.hMod,
+            leveys: openingLock.leveys,
+            korkeus: openingLock.korkeus,
+            pair: isPair()
+        });
+        return;
+    }
+    const kaynti = num("kaynti");
+    if (!isPair()) {
+        if (kaynti != null) setNum("leveys", kaynti + W_KAYNTI);
+    } else {
+        const lisa = num("lisa");
+        if (kaynti != null && lisa != null) setNum("leveys", kaynti + lisa + W_PARI);
+    }
+    setLockedBounds(false);
+}
+
 function applyLockedSync(source) {
-    const wr = widthRanges(openingLock.leveys);
     const hr = heightRanges(openingLock.korkeus);
     setNum("leveys", openingLock.leveys);
     setNum("korkeus", openingLock.korkeus);
+    if (!isPair()) {
+        setNum("kaynti", openingLock.leveys - W_KAYNTI);
+        if (source === "potku") {
+            const potku = num("potku");
+            if (!inRange(potku, hr.potkuMin, hr.potkuMax)) return;
+            setNum("valoH", openingLock.korkeus - potku - H_POTKU);
+        }
+        if (source === "valoH") {
+            const valoH = num("valoH");
+            if (!inRange(valoH, hr.valoMin, hr.valoMax)) return;
+            setNum("potku", openingLock.korkeus - valoH - H_POTKU);
+        }
+        return;
+    }
+    const wr = widthRanges(openingLock.leveys);
     if (source === "kaynti") {
         const kaynti = num("kaynti");
         if (!inRange(kaynti, wr.kayntiMin, wr.kayntiMax)) return;
@@ -251,11 +368,16 @@ function applySync(source) {
     const korkeus = num("korkeus");
     const potku = num("potku");
 
-    if (source === "leveys" && leveys != null && lisa != null) {
-        setNum("kaynti", leveys - W_PARI - lisa);
-    }
-    if ((source === "kaynti" || source === "lisa") && kaynti != null && lisa != null) {
-        setNum("leveys", kaynti + lisa + W_PARI);
+    if (!isPair()) {
+        if (source === "leveys" && leveys != null) setNum("kaynti", leveys - W_KAYNTI);
+        if (source === "kaynti" && kaynti != null) setNum("leveys", kaynti + W_KAYNTI);
+    } else {
+        if (source === "leveys" && leveys != null && lisa != null) {
+            setNum("kaynti", leveys - W_PARI - lisa);
+        }
+        if ((source === "kaynti" || source === "lisa") && kaynti != null && lisa != null) {
+            setNum("leveys", kaynti + lisa + W_PARI);
+        }
     }
     if (source === "korkeus" && korkeus != null && potku != null && potku >= KICK_MIN) {
         setNum("valoH", korkeus - potku - H_POTKU);
@@ -273,6 +395,8 @@ function readSpec() {
         leveys: num("leveys"),
         korkeus: num("korkeus"),
         potku: num("potku"),
+        pair: isPair(),
+        vasen: hand() === "vasen",
         vari: $("vari").value
     };
 }
@@ -283,17 +407,21 @@ function rangeMessage(label, min, max) {
 
 function validate(s) {
     if (openingError) return openingError;
-    if ([s.kaynti, s.lisa, s.valoH, s.leveys, s.korkeus, s.potku].some((v) => v == null)) {
-        return "Täytä kaikki mittakentät.";
-    }
+    if (typeError) return typeError;
+    const dims = s.pair
+        ? [s.kaynti, s.lisa, s.valoH, s.leveys, s.korkeus, s.potku]
+        : [s.kaynti, s.valoH, s.leveys, s.korkeus, s.potku];
+    if (dims.some((v) => v == null)) return "Täytä kaikki mittakentät.";
     if (openingLock) {
-        const wr = widthRanges(openingLock.leveys);
         const hr = heightRanges(openingLock.korkeus);
-        if (s.kaynti < wr.kayntiMin || s.kaynti > wr.kayntiMax) {
-            return rangeMessage("Käyntioven valoaukko", wr.kayntiMin, wr.kayntiMax);
-        }
-        if (s.lisa < wr.lisaMin || s.lisa > wr.lisaMax) {
-            return rangeMessage("Lisäoven valoaukko", wr.lisaMin, wr.lisaMax);
+        if (s.pair) {
+            const wr = widthRanges(openingLock.leveys);
+            if (s.kaynti < wr.kayntiMin || s.kaynti > wr.kayntiMax) {
+                return rangeMessage("Käyntioven valoaukko", wr.kayntiMin, wr.kayntiMax);
+            }
+            if (s.lisa < wr.lisaMin || s.lisa > wr.lisaMax) {
+                return rangeMessage("Lisäoven valoaukko", wr.lisaMin, wr.lisaMax);
+            }
         }
         if (s.potku < hr.potkuMin || s.potku > hr.potkuMax) {
             return rangeMessage("Potkupellin korkeus", hr.potkuMin, hr.potkuMax);
@@ -302,13 +430,16 @@ function validate(s) {
             return rangeMessage("Valoaukon korkeus", hr.valoMin, hr.valoMax);
         }
     }
-    if (Math.abs(s.kaynti + s.lisa + W_PARI - s.leveys) > 1) {
-        return "Leveys ei täsmää valoaukkoihin.";
+    if (s.pair) {
+        if (Math.abs(s.kaynti + s.lisa + W_PARI - s.leveys) > 1) return "Leveys ei täsmää valoaukkoihin.";
+        if (s.lisa < GLASS_MIN) return "Valoaukko on liian pieni.";
+    } else if (Math.abs(s.kaynti + W_KAYNTI - s.leveys) > 1) {
+        return "Leveys ei täsmää valoaukkoon.";
     }
     if (s.potku >= KICK_MIN && Math.abs(s.valoH + s.potku + H_POTKU - s.korkeus) > 1) {
         return "Korkeus ei täsmää valoaukkoon ja potkuun.";
     }
-    if (s.kaynti < GLASS_MIN || s.lisa < GLASS_MIN || s.valoH < GLASS_MIN) return "Valoaukko on liian pieni.";
+    if (s.kaynti < GLASS_MIN || s.valoH < GLASS_MIN) return "Valoaukko on liian pieni.";
     if (s.potku < KICK_MIN) return "Potkupellin korkeus on vähintään 40 mm.";
     return "";
 }
@@ -437,10 +568,10 @@ function addBarrelHinge(group, x, yCenter, body, silver, brass) {
     addMesh(group, new THREE.SphereGeometry(2.2, 16, 12), brass, x, top + 7.1, z);
 }
 
-function addHinges(group, height, width, body, silver, brass) {
+function addHinges(group, height, width, body, silver, brass, bothSides) {
     [200, height / 2, height - 200].forEach((y) => {
         const inset = KARMI + RAKO / 2;
-        addBarrelHinge(group, inset, y, body, silver, brass);
+        if (bothSides) addBarrelHinge(group, inset, y, body, silver, brass);
         addBarrelHinge(group, width - inset, y, body, silver, brass);
     });
 }
@@ -465,6 +596,7 @@ function addShadowGaps(group, spec, material) {
     addBox(group, spec.leveys - KARMI - RAKO, KARMI + RAKO, RAKO, innerH, zFront, depth, material);
     addBox(group, KARMI + RAKO, KARMI, innerW, RAKO, zFront, depth, material);
     addBox(group, KARMI + RAKO, spec.korkeus - KARMI - RAKO, innerW, RAKO, zFront, depth, material);
+    if (!spec.pair) return;
     const meetX = spec.lisa + 195;
     const glassTop = spec.korkeus - KARMI - RAKO - PUITE;
     const gy = glassTop - spec.valoH;
@@ -694,30 +826,45 @@ function addPanicLatch(group, leaf, chrome, dark) {
     group.add(paddle);
 }
 
+function addLeaf(group, leaf, steel, kick, glassMat) {
+    const leafFront = -1.4;
+    leaf.bars.forEach((pts) => addExtrude(group, pts, leafFront, SYVYYS - 1.4, steel, true));
+    const [px, py, pw, ph] = leaf.plate;
+    addBox(group, px, py, pw, ph, 2.6, 2.4, kick, true);
+    addBox(group, px, py, pw, ph, -SYVYYS - 0.2, 2.4, kick, true);
+    const [gx, gy, gw, gh] = leaf.glass;
+    addBox(group, gx, gy, gw, gh, -22, LASI_T, glassMat);
+    addBead(group, gx, gy, gw, gh, steel);
+}
+
 function buildDoor(spec, steel, kick, glassMat, gapMat, silver, brass, pull) {
     const group = new THREE.Group();
-    const leafFront = -1.4;
     miteredFrame(0, 0, spec.leveys, spec.korkeus, KARMI, KARMI, KARMI, KARMI).forEach((pts) => {
         addExtrude(group, pts, 0, SYVYYS, steel, true);
     });
     addShadowGaps(group, spec, gapMat);
-    const sidePad = 265 / 2;
-    const meet = W_PARI - 265;
-    const left = leafGeom(spec, sidePad, spec.lisa, PUITE, PUITE_LISA);
-    const right = leafGeom(spec, sidePad + spec.lisa + meet, spec.kaynti, PUITE, PUITE);
-    [left, right].forEach((leaf) => {
-        leaf.bars.forEach((pts) => addExtrude(group, pts, leafFront, SYVYYS - 1.4, steel, true));
-        const [px, py, pw, ph] = leaf.plate;
-        addBox(group, px, py, pw, ph, 2.6, 2.4, kick, true);
-        addBox(group, px, py, pw, ph, -SYVYYS - 0.2, 2.4, kick, true);
-        const [gx, gy, gw, gh] = leaf.glass;
-        addBox(group, gx, gy, gw, gh, -22, LASI_T, glassMat);
-        addBead(group, gx, gy, gw, gh, steel);
-    });
-    addHinges(group, spec.korkeus, spec.leveys, steel, silver, brass);
-    addPullAndLock(group, right, pull, gapMat);
-    addPanicLatch(group, left, chrome, gapMat);
-    group.scale.setScalar(0.001);
+    const sidePad = W_KAYNTI / 2;
+    if (spec.pair) {
+        const meet = W_PARI - W_KAYNTI;
+        const left = leafGeom(spec, sidePad, spec.lisa, PUITE, PUITE_LISA);
+        const right = leafGeom(spec, sidePad + spec.lisa + meet, spec.kaynti, PUITE, PUITE);
+        addLeaf(group, left, steel, kick, glassMat);
+        addLeaf(group, right, steel, kick, glassMat);
+        addHinges(group, spec.korkeus, spec.leveys, steel, silver, brass, true);
+        addPullAndLock(group, right, pull, gapMat);
+        addPanicLatch(group, left, chrome, gapMat);
+    } else {
+        const leaf = leafGeom(spec, sidePad, spec.kaynti, PUITE, PUITE);
+        addLeaf(group, leaf, steel, kick, glassMat);
+        addHinges(group, spec.korkeus, spec.leveys, steel, silver, brass, false);
+        addPullAndLock(group, leaf, pull, gapMat);
+    }
+    if (spec.vasen) {
+        group.scale.set(-0.001, 0.001, 0.001);
+        group.position.x = spec.leveys * 0.001;
+    } else {
+        group.scale.setScalar(0.001);
+    }
     return group;
 }
 
@@ -818,6 +965,9 @@ const brass = new THREE.MeshPhysicalMaterial({
     metalness: 1,
     envMapIntensity: 0.9
 });
+[steel, kick, glassMat, gapMat, silver, chrome, pull, brass].forEach((material) => {
+    material.side = THREE.DoubleSide;
+});
 
 let door = null;
 
@@ -863,7 +1013,12 @@ document.getElementById("mitat").addEventListener("input", (event) => {
     if (event.target.id === "ral") applyRal();
     else if (event.target.id === "vari") matchRalFromColor();
     else if (event.target.id === "oviaukko") applyOpeningInput(false);
-    else applySync(event.target.id);
+    else if (event.target.name === "tyyppi") applyTypeChange();
+    else if (event.target.name === "katisyys") syncOpeningHand();
+    else {
+        typeError = "";
+        applySync(event.target.id);
+    }
     syncing = false;
     rebuild();
 });
