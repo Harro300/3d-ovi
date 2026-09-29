@@ -1,0 +1,36 @@
+{
+  "tyyppi": "TLO EI30 1214 MÄRKÄET",
+  "ovityyppi": "kayntiovi",
+  "saranapuoli": "oikea",
+  "katselu": "ulkoa",
+  "leveys": 1480,
+  "korkeus": 2310,
+  "potkulevy_h": 265,
+  "lukko_h": 1000,
+  "karmi": 50,
+  "puite": 52,
+  "syvyys": 60,
+  "rako": 5,
+  "lasi": {
+    "paksuus": 18
+  },
+  "vari": "RAL 7022 MATTA",
+  "heloitus": [
+    "EM234 LUKKOSOVITE",
+    "EA281 YLIVIENNIN SOVITE",
+    "EA502 KOSKETINSOVITE",
+    "3000 PIKASALPA PAIKALLE",
+    "8400/4615 PIKASALVAN KOSKETINSOVITE",
+    "25*20 LYÖNTI"
+  ],
+  "kynnys": "50*20 RST-PUTKIKYNNYS",
+  "jarjestelma": "JANSEN JANISOL 2",
+  "lisat": [
+    "POTKULEVY VAAKAAN HIOTTU RST PROFIILIN PINTAAN",
+    "TERÄSLEVYT SISÄÄN, KOVA VILLA",
+    "PALOKYLTTI EUFI19004014"
+  ],
+  "maara": 1,
+  "tyo": "Kontulan ala-aste",
+  "tyonumero": "366-25"
+}
