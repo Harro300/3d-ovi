@@ -34,6 +34,7 @@ const RAL = {
 };
 
 const $ = (id) => document.getElementById(id);
+const HANDOFF_KEY = "ovi-siirto";
 let syncing = false;
 let ralError = "";
 let openingError = "";
@@ -385,6 +386,103 @@ function applySync(source) {
     if ((source === "valoH" || source === "potku") && valoH != null && potku != null && potku >= KICK_MIN) {
         setNum("korkeus", valoH + potku + H_POTKU);
     }
+}
+
+function readHandoff() {
+    try {
+        const raw = sessionStorage.getItem(HANDOFF_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+        return null;
+    }
+}
+
+function writeHandoff(data) {
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(data));
+}
+
+function captureRestore() {
+    return {
+        oviaukko: $("oviaukko").value,
+        tyyppi: doorType(),
+        katisyys: hand(),
+        kaynti: $("kaynti").value,
+        lisa: $("lisa").value,
+        valoH: $("valoH").value,
+        leveys: $("leveys").value,
+        korkeus: $("korkeus").value,
+        potku: $("potku").value,
+        vari: $("vari").value,
+        ral: $("ral").value
+    };
+}
+
+function specFor2d() {
+    const s = readSpec();
+    const ral = $("ral").value.replace(/\D/g, "");
+    return {
+        tyyppi: $("oviaukko").value.trim(),
+        ovityyppi: s.pair ? "pariovi" : "kayntiovi",
+        saranapuoli: s.vasen ? "vasen" : "oikea",
+        leveys: s.leveys,
+        korkeus: s.korkeus,
+        potkulevy_h: s.potku,
+        valoaukko_w: s.kaynti,
+        valoaukko_h: s.valoH,
+        lisaovi_valoaukko_w: s.pair ? s.lisa : 0,
+        lukko_h: 1000,
+        lasi: { paksuus: LASI_T, enabled: true },
+        vari: RAL[ral] ? "RAL " + ral : ""
+    };
+}
+
+function siirra() {
+    const dim = validate(readSpec());
+    const msg = [ralError, dim].filter(Boolean).join(" ");
+    $("virhe").hidden = !msg;
+    $("virhe").textContent = msg;
+    if (dim) return;
+    const prev = readHandoff() || {};
+    writeHandoff({
+        spec: specFor2d(),
+        restore3d: captureRestore(),
+        extras: prev.extras || null
+    });
+    location.href = "../index.html";
+}
+
+function restore3dIfAny() {
+    const data = readHandoff();
+    const saved = data && data.restore3d;
+    if (!saved) return;
+    syncing = true;
+    $("oviaukko").value = saved.oviaukko || "";
+    $("kaynti").value = saved.kaynti ?? "";
+    $("lisa").value = saved.lisa ?? "";
+    $("valoH").value = saved.valoH ?? "";
+    $("leveys").value = saved.leveys ?? "";
+    $("korkeus").value = saved.korkeus ?? "";
+    $("potku").value = saved.potku ?? "";
+    if (saved.vari) $("vari").value = saved.vari;
+    $("ral").value = saved.ral || "";
+    setDoorType(saved.tyyppi === "kayntiovi" ? "kayntiovi" : "pariovi");
+    setHand(saved.katisyys === "vasen" ? "vasen" : "oikea");
+    const parsed = parseOpening($("oviaukko").value);
+    if (parsed.state === "ok") {
+        openingLock = {
+            wMod: parsed.wMod,
+            hMod: parsed.hMod,
+            leveys: parsed.leveys,
+            korkeus: parsed.korkeus
+        };
+        setLockedBounds(true);
+    } else {
+        clearLock();
+    }
+    syncLisa();
+    const ral = $("ral").value.replace(/\D/g, "");
+    ralError = ral.length === 4 && !RAL[ral] ? "RAL " + ral + " ei ole tuettu." : "";
+    syncing = false;
 }
 
 function readSpec() {
@@ -1031,7 +1129,10 @@ $("oviaukko").addEventListener("blur", () => {
     rebuild();
 });
 
+$("siirra").addEventListener("click", siirra);
+
 window.addEventListener("resize", resize);
+restore3dIfAny();
 rebuild();
 frameCamera();
 resize();
