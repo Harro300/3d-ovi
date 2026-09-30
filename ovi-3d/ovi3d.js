@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 
 const KARMI = 40;
 const PUITE = 87.5;
@@ -40,6 +44,9 @@ let ralError = "";
 let openingError = "";
 let typeError = "";
 let openingLock = null;
+let viewMode = "studio";
+let wallType = "betoni";
+const WALL_TYPES = ["betoni", "rappaus", "tiili"];
 
 function doorType() {
     const picked = document.querySelector('input[name="tyyppi"]:checked');
@@ -413,8 +420,15 @@ function captureRestore() {
         korkeus: $("korkeus").value,
         potku: $("potku").value,
         vari: $("vari").value,
-        ral: $("ral").value
+        ral: $("ral").value,
+        nakyma: viewMode,
+        seina: wallType
     };
+}
+
+function setRadio(name, value) {
+    const input = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+    if (input) input.checked = true;
 }
 
 function specFor2d() {
@@ -467,6 +481,10 @@ function restore3dIfAny() {
     $("ral").value = saved.ral || "";
     setDoorType(saved.tyyppi === "kayntiovi" ? "kayntiovi" : "pariovi");
     setHand(saved.katisyys === "vasen" ? "vasen" : "oikea");
+    viewMode = saved.nakyma === "seina" ? "seina" : "studio";
+    if (WALL_TYPES.includes(saved.seina)) wallType = saved.seina;
+    setRadio("nakymatila", viewMode);
+    setRadio("seina", wallType);
     const parsed = parseOpening($("oviaukko").value);
     if (parsed.state === "ok") {
         openingLock = {
@@ -626,7 +644,7 @@ function addExtrude(group, pts, zFront, depth, material, bevel) {
         bevelEnabled: !!bevel,
         bevelThickness: bevelT,
         bevelSize: bevel ? 0.6 : 0,
-        bevelSegments: bevel ? 2 : 0,
+        bevelSegments: bevel ? 4 : 0,
         curveSegments: 1
     });
     geom.computeBoundingBox();
@@ -635,10 +653,11 @@ function addExtrude(group, pts, zFront, depth, material, bevel) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
+    return mesh;
 }
 
 function addBox(group, x, y, w, h, zFront, depth, material, bevel) {
-    addExtrude(group, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], zFront, depth, material, bevel);
+    return addExtrude(group, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], zFront, depth, material, bevel);
 }
 
 function addMesh(group, geometry, material, x, y, z) {
@@ -674,11 +693,19 @@ function addHinges(group, height, width, body, silver, brass, bothSides) {
     });
 }
 
-function addBead(group, gx, gy, gw, gh, material) {
+function addGlassSpacer(group, gx, gy, gw, gh, material) {
+    const s = 6;
+    const zFront = -27;
+    const depth = 8;
+    addBox(group, gx, gy + gh - s, gw, s, zFront, depth, material);
+    addBox(group, gx, gy, gw, s, zFront, depth, material);
+    addBox(group, gx, gy + s, s, gh - 2 * s, zFront, depth, material);
+    addBox(group, gx + gw - s, gy + s, s, gh - 2 * s, zFront, depth, material);
+}
+
+function addBead(group, gx, gy, gw, gh, material, zFront, depth) {
     const b = 12;
     const o = 2;
-    const zFront = -0.35;
-    const depth = 4.2;
     addBox(group, gx - b + o, gy + gh - o, gw + (b - o) * 2, b, zFront, depth, material, true);
     addBox(group, gx - b + o, gy - b + o, gw + (b - o) * 2, b, zFront, depth, material, true);
     addBox(group, gx - b + o, gy, b, gh, zFront, depth, material, true);
@@ -924,38 +951,41 @@ function addPanicLatch(group, leaf, chrome, dark) {
     group.add(paddle);
 }
 
-function addLeaf(group, leaf, steel, kick, glassMat) {
+function addLeaf(group, leaf, m) {
     const leafFront = -1.4;
-    leaf.bars.forEach((pts) => addExtrude(group, pts, leafFront, SYVYYS - 1.4, steel, true));
+    const glassFront = -22;
+    leaf.bars.forEach((pts) => addExtrude(group, pts, leafFront, SYVYYS - 1.4, m.steel, true));
     const [px, py, pw, ph] = leaf.plate;
-    addBox(group, px, py, pw, ph, 2.6, 2.4, kick, true);
-    addBox(group, px, py, pw, ph, -SYVYYS - 0.2, 2.4, kick, true);
+    addBox(group, px, py, pw, ph, 2.6, 2.4, m.kick, true);
+    addBox(group, px, py, pw, ph, -SYVYYS - 0.2, 2.4, m.kick, true);
     const [gx, gy, gw, gh] = leaf.glass;
-    addBox(group, gx, gy, gw, gh, -22, LASI_T, glassMat);
-    addBead(group, gx, gy, gw, gh, steel);
+    addBox(group, gx, gy, gw, gh, glassFront, LASI_T, m.glass).castShadow = false;
+    addGlassSpacer(group, gx, gy, gw, gh, m.spacer);
+    addBead(group, gx, gy, gw, gh, m.steel, -0.35, -0.35 - glassFront);
+    addBead(group, gx, gy, gw, gh, m.steel, glassFront - LASI_T, SYVYYS - 0.6 + glassFront - LASI_T);
 }
 
-function buildDoor(spec, steel, kick, glassMat, gapMat, silver, brass, pull) {
+function buildDoor(spec, m) {
     const group = new THREE.Group();
     miteredFrame(0, 0, spec.leveys, spec.korkeus, KARMI, KARMI, KARMI, KARMI).forEach((pts) => {
-        addExtrude(group, pts, 0, SYVYYS, steel, true);
+        addExtrude(group, pts, 0, SYVYYS, m.steel, true);
     });
-    addShadowGaps(group, spec, gapMat);
+    addShadowGaps(group, spec, m.gap);
     const sidePad = W_KAYNTI / 2;
     if (spec.pair) {
         const meet = W_PARI - W_KAYNTI;
         const left = leafGeom(spec, sidePad, spec.lisa, PUITE, PUITE_LISA);
         const right = leafGeom(spec, sidePad + spec.lisa + meet, spec.kaynti, PUITE, PUITE);
-        addLeaf(group, left, steel, kick, glassMat);
-        addLeaf(group, right, steel, kick, glassMat);
-        addHinges(group, spec.korkeus, spec.leveys, steel, silver, brass, true);
-        addPullAndLock(group, right, pull, gapMat);
-        addPanicLatch(group, left, chrome, gapMat);
+        addLeaf(group, left, m);
+        addLeaf(group, right, m);
+        addHinges(group, spec.korkeus, spec.leveys, m.hinge, m.silver, m.brass, true);
+        addPullAndLock(group, right, m.pull, m.gap);
+        addPanicLatch(group, left, m.chrome, m.gap);
     } else {
         const leaf = leafGeom(spec, sidePad, spec.kaynti, PUITE, PUITE);
-        addLeaf(group, leaf, steel, kick, glassMat);
-        addHinges(group, spec.korkeus, spec.leveys, steel, silver, brass, false);
-        addPullAndLock(group, leaf, pull, gapMat);
+        addLeaf(group, leaf, m);
+        addHinges(group, spec.korkeus, spec.leveys, m.hinge, m.silver, m.brass, false);
+        addPullAndLock(group, leaf, m.pull, m.gap);
     }
     if (spec.vasen) {
         group.scale.set(-0.001, 0.001, 0.001);
@@ -966,117 +996,631 @@ function buildDoor(spec, steel, kick, glassMat, gapMat, silver, brass, pull) {
     return group;
 }
 
-const host = $("nakyma");
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x000000, 0);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-host.appendChild(renderer.domElement);
+function hash(ix, iy, seed) {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed, 1442695041);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+}
 
+function noise(x, y, px, py, seed) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const fx = x - xi;
+    const fy = y - yi;
+    const x0 = ((xi % px) + px) % px;
+    const y0 = ((yi % py) + py) % py;
+    const x1 = (x0 + 1) % px;
+    const y1 = (y0 + 1) % py;
+    const u = fx * fx * (3 - 2 * fx);
+    const v = fy * fy * (3 - 2 * fy);
+    const a = hash(x0, y0, seed);
+    const b = hash(x1, y0, seed);
+    const c = hash(x0, y1, seed);
+    const d = hash(x1, y1, seed);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function fbm(x, y, px, py, octaves, seed) {
+    let sum = 0;
+    let amp = 0.5;
+    let norm = 0;
+    for (let o = 0; o < octaves; o++) {
+        sum += amp * noise(x, y, px, py, seed + o * 17);
+        norm += amp;
+        x *= 2;
+        y *= 2;
+        px *= 2;
+        py *= 2;
+        amp *= 0.5;
+    }
+    return sum / norm;
+}
+
+function dataTexture(data, w, h, srgb) {
+    const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.anisotropy = maxAniso;
+    if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+}
+
+// Tileable maps: `fill` writes height (mm), roughness and optional sRGB albedo per pixel.
+function surfaceMaps(w, h, spanU, spanV, fill, withColor) {
+    const n = w * h;
+    const height = new Float32Array(n);
+    const rough = new Float32Array(n);
+    const albedo = withColor ? new Float32Array(n * 3) : null;
+    for (let y = 0, i = 0; y < h; y++) {
+        for (let x = 0; x < w; x++, i++) fill(x / w, y / h, x, y, i, height, rough, albedo);
+    }
+    const sx = 1 / (2 * spanU / w);
+    const sy = 1 / (2 * spanV / h);
+    const normal = new Uint8Array(n * 4);
+    const roughData = new Uint8Array(n * 4);
+    const colorData = withColor ? new Uint8Array(n * 4) : null;
+    for (let y = 0; y < h; y++) {
+        const row = y * w;
+        const prev = ((y - 1 + h) % h) * w;
+        const next = ((y + 1) % h) * w;
+        for (let x = 0; x < w; x++) {
+            const i = row + x;
+            const dx = (height[row + (x + 1) % w] - height[row + (x - 1 + w) % w]) * sx;
+            const dy = (height[next + x] - height[prev + x]) * sy;
+            const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+            const o = i * 4;
+            normal[o] = (-dx * inv * 0.5 + 0.5) * 255;
+            normal[o + 1] = (-dy * inv * 0.5 + 0.5) * 255;
+            normal[o + 2] = (inv * 0.5 + 0.5) * 255;
+            normal[o + 3] = 255;
+            const r = Math.min(1, Math.max(0, rough[i])) * 255;
+            roughData[o] = r;
+            roughData[o + 1] = r;
+            roughData[o + 2] = r;
+            roughData[o + 3] = 255;
+            if (colorData) {
+                colorData[o] = Math.min(1, albedo[i * 3]) * 255;
+                colorData[o + 1] = Math.min(1, albedo[i * 3 + 1]) * 255;
+                colorData[o + 2] = Math.min(1, albedo[i * 3 + 2]) * 255;
+                colorData[o + 3] = 255;
+            }
+        }
+    }
+    const maps = {
+        normalMap: dataTexture(normal, w, h, false),
+        roughnessMap: dataTexture(roughData, w, h, false)
+    };
+    if (colorData) maps.map = dataTexture(colorData, w, h, true);
+    return maps;
+}
+
+function setRepeat(maps, u, v) {
+    Object.values(maps).forEach((tex) => tex.repeat.set(u, v));
+    return maps;
+}
+
+function powderCoatMaps() {
+    const span = 30;
+    const maps = surfaceMaps(512, 512, span, span, (u, v, x, y, i, height, rough) => {
+        const peel = fbm(u * 14, v * 14, 14, 14, 4, 5);
+        const fine = noise(u * 96, v * 96, 96, 96, 9);
+        height[i] = (peel - 0.5) * 0.045 + (fine - 0.5) * 0.006;
+        rough[i] = 0.64 + (fine - 0.5) * 0.08 + (peel - 0.5) * 0.06;
+    }, false);
+    return setRepeat(maps, 1 / span, 1 / span);
+}
+
+function brushedMaps() {
+    const span = 160;
+    const maps = surfaceMaps(512, 512, span, span, (u, v, x, y, i, height, rough, albedo) => {
+        const band = fbm(u * 1, v * 24, 1, 24, 3, 45);
+        const streak = fbm(u * 2, v * 96, 2, 96, 3, 41);
+        const line = noise(u * 4, v * 512, 4, 512, 43);
+        const s = band * 0.4 + streak * 0.35 + line * 0.25;
+        height[i] = (s - 0.5) * 0.004;
+        rough[i] = 0.3 + s * 0.2;
+        const c = 0.86 + (s - 0.5) * 0.22;
+        albedo[i * 3] = c;
+        albedo[i * 3 + 1] = c;
+        albedo[i * 3 + 2] = c;
+    }, true);
+    return setRepeat(maps, 1 / span, 1 / span);
+}
+
+function concreteMaps() {
+    const sx = 2400;
+    const sy = 1200;
+    const maps = surfaceMaps(1024, 512, sx, sy, (u, v, x, y, i, height, rough, albedo) => {
+        const xm = u * sx;
+        const ym = v * sy;
+        const cloud = fbm(u * 6, v * 3, 6, 3, 4, 11);
+        const mid = fbm(u * 96, v * 48, 96, 48, 2, 23);
+        const fine = noise(u * 480, v * 240, 480, 240, 31);
+        let hgt = (mid - 0.5) * 0.35 + (fine - 0.5) * 0.25;
+        let tone = 0.84 + cloud * 0.26 + (mid - 0.5) * 0.08 + (fine - 0.5) * 0.05;
+        let r = 0.86 + (fine - 0.5) * 0.08;
+        const edge = Math.min(xm, sx - xm, ym, sy - ym);
+        if (edge < 2.4) {
+            hgt += 0.5;
+            tone *= 0.88;
+        } else if (edge < 40) {
+            tone *= 0.96 + edge * 0.001;
+        }
+        const d = Math.hypot((xm % 600) - 300, (ym % 600) - 300);
+        if (d < 11) {
+            hgt -= 7 * (1 - d / 11);
+            tone *= 0.5 + d * 0.02;
+            r = 0.95;
+        } else if (d < 15) {
+            hgt -= 0.4;
+            tone *= 0.92;
+        }
+        const pcx = Math.floor(xm / 4);
+        const pcy = Math.floor(ym / 4);
+        const ph = hash(pcx, pcy, 77);
+        if (ph < 0.045) {
+            const jx = (pcx + 0.5) * 4 + (hash(pcx, pcy, 78) - 0.5) * 2;
+            const jy = (pcy + 0.5) * 4 + (hash(pcx, pcy, 79) - 0.5) * 2;
+            const pr = 1 + ph * 30;
+            const pd = Math.hypot(xm - jx, ym - jy);
+            if (pd < pr) {
+                hgt -= 0.8 * (1 - pd / pr);
+                tone *= 0.62;
+            }
+        }
+        height[i] = hgt;
+        rough[i] = r;
+        albedo[i * 3] = 0.55 * tone;
+        albedo[i * 3 + 1] = 0.545 * tone;
+        albedo[i * 3 + 2] = 0.53 * tone;
+    }, true);
+    return setRepeat(maps, 1000 / sx, 1000 / sy);
+}
+
+function plasterMaps() {
+    const span = 1000;
+    const maps = surfaceMaps(1024, 1024, span, span, (u, v, x, y, i, height, rough, albedo) => {
+        const wave = fbm(u * 5, v * 5, 5, 5, 3, 51);
+        const grain = fbm(u * 320, v * 320, 320, 320, 2, 53);
+        const sand = hash(x, y, 57);
+        height[i] = (wave - 0.5) * 1.2 + (grain - 0.5) * 0.55 + (sand - 0.5) * 0.18;
+        const tone = 0.95 + (wave - 0.5) * 0.07 + (grain - 0.5) * 0.07 + (sand - 0.5) * 0.035;
+        rough[i] = 0.93 + (grain - 0.5) * 0.06;
+        albedo[i * 3] = 0.7 * tone;
+        albedo[i * 3 + 1] = 0.69 * tone;
+        albedo[i * 3 + 2] = 0.665 * tone;
+    }, true);
+    return setRepeat(maps, 1000 / span, 1000 / span);
+}
+
+// Finnish brick 285 x 85 mm face, 15 mm joints, running bond.
+function brickMaps() {
+    const span = 2400;
+    const spanY = 1200;
+    const maps = surfaceMaps(1536, 768, span, spanY, (u, v, x, y, i, height, rough, albedo) => {
+        const xm = u * span;
+        const ym = v * spanY;
+        const row = Math.floor(ym / 100);
+        const xr = (xm + (row % 2) * 150) % span;
+        const col = Math.floor(xr / 300);
+        const lx = xr - col * 300;
+        const ly = ym - row * 100;
+        const edge = Math.min(lx - 7.5, 292.5 - lx, ly - 7.5, 92.5 - ly);
+        const grain = noise(u * 840, v * 420, 840, 420, 61);
+        const o = i * 3;
+        if (edge > 0) {
+            const id = hash(col, row, 63);
+            const warm = hash(col, row, 64) - 0.5;
+            const dark = hash(col, row, 65) < 0.14;
+            const blot = fbm(u * 48, v * 24, 48, 24, 3, 67 + col);
+            const bright = 0.78 + id * 0.3;
+            let t = (0.88 + blot * 0.24 + (grain - 0.5) * 0.12) * bright;
+            if (dark) t *= 0.66;
+            const sp = hash(x, y, 69);
+            if (sp < 0.018) t *= 0.62;
+            else if (sp > 0.993) t *= 1.3;
+            const round = edge < 3 ? (3 - edge) * (3 - edge) * 0.28 : 0;
+            height[i] = (blot - 0.5) * 0.8 + (grain - 0.5) * 0.35 - round;
+            rough[i] = 0.82 + (grain - 0.5) * 0.1;
+            albedo[o] = 0.4 * t * (1 + warm * 0.08);
+            albedo[o + 1] = 0.225 * t * (1 + warm * 0.16);
+            albedo[o + 2] = 0.18 * t * (1 + warm * 0.04);
+        } else {
+            const sand = hash(x, y, 71);
+            const ao = 0.72 + 0.28 * Math.min(1, -edge / 4);
+            const t = (0.94 + (grain - 0.5) * 0.14 + (sand - 0.5) * 0.08) * ao;
+            height[i] = -5 + (grain - 0.5) * 0.6 + (sand - 0.5) * 0.2;
+            rough[i] = 0.96;
+            albedo[o] = 0.52 * t;
+            albedo[o + 1] = 0.505 * t;
+            albedo[o + 2] = 0.48 * t;
+        }
+    }, true);
+    return setRepeat(maps, 1000 / span, 1000 / spanY);
+}
+
+function floorMaps(sizeM) {
+    const span = 3000;
+    const maps = surfaceMaps(1024, 1024, span, span, (u, v, x, y, i, height, rough, albedo) => {
+        const cloud = fbm(u * 6, v * 6, 6, 6, 4, 81);
+        const sheen = fbm(u * 4, v * 4, 4, 4, 3, 85);
+        const mid = fbm(u * 60, v * 60, 60, 60, 2, 83);
+        let tone = 0.8 + cloud * 0.34 + (mid - 0.5) * 0.08;
+        const cx = Math.floor(u * 300);
+        const cy = Math.floor(v * 300);
+        const ah = hash(cx, cy, 87);
+        if (ah < 0.4) {
+            const jx = (cx + 0.5 + (hash(cx, cy, 88) - 0.5) * 0.5) * 10;
+            const jy = (cy + 0.5 + (hash(cx, cy, 89) - 0.5) * 0.5) * 10;
+            const r = 1.5 + ah * 6;
+            if (Math.hypot(u * span - jx, v * span - jy) < r) tone *= 0.78 + hash(cx, cy, 90) * 0.5;
+        }
+        height[i] = (mid - 0.5) * 0.08;
+        rough[i] = 0.34 + sheen * 0.28 + (mid - 0.5) * 0.06;
+        albedo[i * 3] = 0.35 * tone;
+        albedo[i * 3 + 1] = 0.345 * tone;
+        albedo[i * 3 + 2] = 0.34 * tone;
+    }, true);
+    const k = sizeM * 1000 / span;
+    return setRepeat(maps, k, k);
+}
+
+function studioEnvironment() {
+    const env = new THREE.Scene();
+    const room = new THREE.Mesh(
+        new THREE.BoxGeometry(24, 12, 24),
+        new THREE.MeshBasicMaterial({ color: 0x141518, side: THREE.BackSide })
+    );
+    room.position.y = 4;
+    env.add(room);
+    const panel = (w, h, intensity, x, y, z, tint) => {
+        const material = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(tint).multiplyScalar(intensity),
+            side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+        mesh.position.set(x, y, z);
+        mesh.lookAt(0, 1.2, 0);
+        env.add(mesh);
+    };
+    panel(4.2, 2.6, 7, -3.2, 4.6, 4.4, 0xfffaf4);
+    panel(1.1, 5, 3.2, 5.2, 2.4, 2.2, 0xeef3ff);
+    panel(1, 5, 2, -6, 2.6, -1.5, 0xffffff);
+    panel(9, 9, 0.45, 0, 7.8, 0, 0xffffff);
+    panel(7, 2.2, 0.55, 0.6, 0.9, 7, 0xf2efe9);
+    panel(0.22, 5, 4.5, 1.4, 2.2, 5.8, 0xffffff);
+    panel(14, 14, 0.2, 0, -1.5, 0, 0xd8d2c8);
+    return env;
+}
+
+const host = $("nakyma");
+const kehys = $("kehys");
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+renderer.shadowMap.autoUpdate = false;
+host.appendChild(renderer.domElement);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+const BG = 0x101114;
 const scene = new THREE.Scene();
-scene.background = null;
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 9, 22);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.28;
+scene.environment = pmrem.fromScene(studioEnvironment(), 0.012).texture;
+scene.environmentIntensity = 0.85;
 pmrem.dispose();
 
-const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 20);
+const camera = new THREE.PerspectiveCamera(26, 1, 0.02, 60);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.target.set(0.74, 1.15, 0);
+controls.dampingFactor = 0.07;
+controls.rotateSpeed = 0.7;
+controls.minDistance = 0.35;
+controls.maxDistance = 8;
+controls.maxPolarAngle = 1.72;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.16));
-const key = new THREE.DirectionalLight(0xfff4e8, 1.35);
-key.position.set(1.6, 3.1, 3.4);
+RectAreaLightUniformsLib.init();
+scene.add(new THREE.HemisphereLight(0xeef1f4, 0x28282a, 0.3));
+const softbox = new THREE.RectAreaLight(0xfffbf7, 5, 2.6, 1.8);
+scene.add(softbox);
+const key = new THREE.SpotLight(0xfffaf3, 60, 0, 0.52, 1, 2);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.near = 0.4;
-key.shadow.camera.far = 12;
-key.shadow.camera.left = -1.6;
-key.shadow.camera.right = 1.6;
-key.shadow.camera.top = 2.2;
-key.shadow.camera.bottom = -0.4;
-key.shadow.bias = -0.00015;
-scene.add(key);
-scene.add(key.target);
-const fill = new THREE.DirectionalLight(0xd5e2ee, 0.28);
-fill.position.set(-2.4, 1.4, 2.2);
-scene.add(fill);
-const rim = new THREE.DirectionalLight(0xffffff, 0.3);
-rim.position.set(-0.4, 2.2, -2.6);
-scene.add(rim);
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 14;
+key.shadow.bias = -0.0001;
+key.shadow.normalBias = 0.0008;
+key.shadow.radius = 7;
+key.shadow.blurSamples = 16;
+key.shadow.intensity = 0.8;
+scene.add(key, key.target);
+const fill = new THREE.DirectionalLight(0xdde6f2, 0.32);
+scene.add(fill, fill.target);
+const rim = new THREE.DirectionalLight(0xffffff, 0.55);
+scene.add(rim, rim.target);
 
-const steel = new THREE.MeshPhysicalMaterial({
-    color: $("vari").value,
-    roughness: 0.55,
-    metalness: 0.02,
-    clearcoat: 0.08,
-    clearcoatRoughness: 0.55,
-    envMapIntensity: 0.22
+const composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, composerTarget);
+composer.addPass(new RenderPass(scene, camera));
+const gtao = new GTAOPass(scene, camera, 1, 1);
+gtao.blendIntensity = 1;
+gtao.updateGtaoMaterial({ radius: 0.16, distanceExponent: 1.6, thickness: 1.5, distanceFallOff: 1, scale: 1.35, samples: 16 });
+gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings: 2, samples: 16 });
+composer.addPass(gtao);
+composer.addPass(new OutputPass());
+
+const peel = powderCoatMaps();
+const brushed = brushedMaps();
+
+const mats = {
+    steel: new THREE.MeshPhysicalMaterial({
+        color: $("vari").value,
+        roughness: 1,
+        roughnessMap: peel.roughnessMap,
+        normalMap: peel.normalMap,
+        normalScale: new THREE.Vector2(1.6, 1.6),
+        metalness: 0,
+        sheen: 0.18,
+        sheenRoughness: 0.8,
+        sheenColor: 0xffffff
+    }),
+    hinge: new THREE.MeshPhysicalMaterial({
+        color: $("vari").value,
+        roughness: 0.62,
+        metalness: 0,
+        sheen: 0.18,
+        sheenRoughness: 0.8,
+        sheenColor: 0xffffff
+    }),
+    kick: new THREE.MeshPhysicalMaterial({
+        color: 0xc4c7ca,
+        map: brushed.map,
+        roughness: 1,
+        roughnessMap: brushed.roughnessMap,
+        metalness: 1,
+        anisotropy: 0.7,
+        anisotropyRotation: Math.PI / 2
+    }),
+    glass: new THREE.MeshPhysicalMaterial({
+        color: 0xe2e9e6,
+        roughness: 0,
+        metalness: 0,
+        transmission: 1,
+        thickness: LASI_T,
+        ior: 1.52,
+        attenuationColor: 0xd4ebe0,
+        attenuationDistance: 0.22,
+        specularIntensity: 1
+    }),
+    spacer: new THREE.MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.55, metalness: 0.4 }),
+    gap: new THREE.MeshStandardMaterial({ color: 0x0c0d0f, roughness: 0.9, metalness: 0 }),
+    silver: new THREE.MeshPhysicalMaterial({ color: 0xdfe2e6, roughness: 0.22, metalness: 1 }),
+    chrome: new THREE.MeshPhysicalMaterial({
+        color: 0xf4f5f7,
+        roughness: 0.07,
+        metalness: 1,
+        clearcoat: 1,
+        clearcoatRoughness: 0.04
+    }),
+    pull: new THREE.MeshPhysicalMaterial({
+        color: 0xcfd2d6,
+        roughness: 0.3,
+        metalness: 1,
+        anisotropy: 0.55
+    }),
+    brass: new THREE.MeshPhysicalMaterial({ color: 0xc6a15a, roughness: 0.3, metalness: 1 })
+};
+Object.entries(mats).forEach(([name, material]) => {
+    if (name !== "glass") material.side = THREE.DoubleSide;
 });
-const kick = new THREE.MeshPhysicalMaterial({
-    color: 0xc5c8c4,
-    roughness: 0.22,
-    metalness: 0.06,
-    clearcoat: 0.4,
-    clearcoatRoughness: 0.2,
-    envMapIntensity: 0.55
-});
-const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xe7eef2,
-    roughness: 0.04,
-    metalness: 0,
-    transmission: 0.55,
-    thickness: 0.018,
-    ior: 1.5,
-    transparent: true,
-    envMapIntensity: 1.1
-});
-const gapMat = new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 1, metalness: 0 });
-const silver = new THREE.MeshPhysicalMaterial({
-    color: 0xe8ebef,
-    roughness: 0.16,
-    metalness: 1,
-    envMapIntensity: 1
-});
-const chrome = new THREE.MeshPhysicalMaterial({
-    color: 0xf7f8fa,
-    roughness: 0.08,
-    metalness: 1,
-    clearcoat: 1,
-    clearcoatRoughness: 0.04,
-    envMapIntensity: 0.72
-});
-const pull = new THREE.MeshPhysicalMaterial({
-    color: 0xd5d8dc,
-    roughness: 0.32,
-    metalness: 1,
-    envMapIntensity: 0.85
-});
-const brass = new THREE.MeshPhysicalMaterial({
-    color: 0xc6a15a,
-    roughness: 0.28,
-    metalness: 1,
-    envMapIntensity: 0.9
-});
-[steel, kick, glassMat, gapMat, silver, chrome, pull, brass].forEach((material) => {
-    material.side = THREE.DoubleSide;
-});
+
+// Cyclorama: floor sweeping up into a backdrop, profile in (z, y).
+function sweepGeometry(width, front, back, radius, height, steps) {
+    const profile = [[front, 0], [back + radius, 0]];
+    for (let i = 1; i <= steps; i++) {
+        const a = (i / steps) * Math.PI / 2;
+        profile.push([back + radius - Math.sin(a) * radius, radius - Math.cos(a) * radius]);
+    }
+    profile.push([back, height]);
+    const pos = [];
+    const uv = [];
+    const index = [];
+    let run = 0;
+    profile.forEach((p, i) => {
+        if (i) run += Math.hypot(p[0] - profile[i - 1][0], p[1] - profile[i - 1][1]);
+        pos.push(-width / 2, p[1], p[0], width / 2, p[1], p[0]);
+        uv.push(0, run, 1, run);
+    });
+    for (let i = 0; i < profile.length - 1; i++) {
+        const a = i * 2;
+        index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geom.setIndex(index);
+    geom.computeVertexNormals();
+    return geom;
+}
+
+const studioSet = new THREE.Mesh(
+    sweepGeometry(18, 9, -2.8, 1.8, 8, 32),
+    new THREE.MeshStandardMaterial({ color: 0x3a3b3f, roughness: 0.9, metalness: 0, side: THREE.DoubleSide })
+);
+studioSet.receiveShadow = true;
+scene.add(studioSet);
+
+const V2 = (x, y) => new THREE.Vector2(x, y);
+const WALL_UV = {
+    generateTopUV(geometry, v, a, b, c) {
+        return [a, b, c].map((k) => V2(v[k * 3], v[k * 3 + 1]));
+    },
+    generateSideWallUV(geometry, v, a, b, c, d) {
+        const horizontal = Math.abs(v[a * 3 + 1] - v[b * 3 + 1]) < Math.abs(v[a * 3] - v[b * 3]);
+        return [a, b, c, d].map((k) => horizontal
+            ? V2(v[k * 3], v[k * 3 + 2])
+            : V2(v[k * 3 + 2], v[k * 3 + 1]));
+    }
+};
+
+function extrudeWorld(pts, zFront, depth, material) {
+    const geom = new THREE.ExtrudeGeometry(shapeFrom(pts), { depth, bevelEnabled: false, UVGenerator: WALL_UV });
+    geom.translate(0, 0, zFront - depth);
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+}
+
+const WALL_MAKERS = { betoni: concreteMaps, rappaus: plasterMaps, tiili: brickMaps };
+const wallMats = {};
+let floorMat = null;
+const FLOOR_SIZE = 26;
+const sealantMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.75, metalness: 0 });
+
+function wallMaterial(type) {
+    if (!wallMats[type]) {
+        wallMats[type] = new THREE.MeshStandardMaterial({ ...WALL_MAKERS[type](), roughness: 1, metalness: 0 });
+    }
+    return wallMats[type];
+}
+
+function floorMaterial() {
+    if (!floorMat) floorMat = new THREE.MeshStandardMaterial({ ...floorMaps(FLOOR_SIZE), roughness: 1, metalness: 0 });
+    return floorMat;
+}
+
+function texturesPending() {
+    return viewMode === "seina" && (!wallMats[wallType] || !floorMat);
+}
+
+// Door front is flush with the wall face; 10 mm installation joint on sides and top.
+function buildWallSet(spec) {
+    const L = spec.leveys / 1000;
+    const H = spec.korkeus / 1000;
+    const j = 0.01;
+    const T = 0.2;
+    const W = 11;
+    const WH = 4.8;
+    const x0 = L / 2 - W / 2;
+    const x1 = L / 2 + W / 2;
+    const group = new THREE.Group();
+    group.add(extrudeWorld(
+        [[x0, 0], [-j, 0], [-j, H + j], [L + j, H + j], [L + j, 0], [x1, 0], [x1, WH], [x0, WH]],
+        0, T, wallMaterial(wallType)
+    ));
+    group.add(extrudeWorld(
+        [[-j, 0], [-j, H + j], [L + j, H + j], [L + j, 0], [L, 0], [L, H], [0, H], [0, 0]],
+        -0.004, T - 0.008, sealantMat
+    ));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE), floorMaterial());
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(L / 2, 0, 0);
+    floor.receiveShadow = true;
+    group.add(floor);
+    return group;
+}
+
+function disposeGeometry(object) {
+    object.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+    });
+}
+
+let wallSet = null;
+
+function updateStage(spec) {
+    const cx = spec.leveys / 2000;
+    const cy = spec.korkeus / 2000;
+    studioSet.visible = viewMode === "studio";
+    studioSet.position.x = cx;
+    if (wallSet) {
+        scene.remove(wallSet);
+        disposeGeometry(wallSet);
+        wallSet = null;
+    }
+    if (viewMode === "seina") {
+        wallSet = buildWallSet(spec);
+        scene.add(wallSet);
+    }
+    softbox.position.set(cx - 1.9, 2.9, 3.1);
+    softbox.lookAt(cx, cy, 0);
+    key.position.set(cx - 2.3, 3.5, 3.6);
+    key.target.position.set(cx, cy * 0.8, 0);
+    fill.position.set(cx + 3.6, 1.6, 3);
+    fill.target.position.set(cx, cy, 0);
+    rim.position.set(cx - 1.6, 3.2, -3.6);
+    rim.target.position.set(cx, cy, 0);
+}
+
+function updateInfo(spec) {
+    const ral = $("ral").value.replace(/\D/g, "");
+    const parts = [
+        spec.pair ? "Pariovi" : "Käyntiovi",
+        Math.round(spec.leveys) + " × " + Math.round(spec.korkeus) + " mm"
+    ];
+    if (RAL[ral]) parts.push("RAL " + ral);
+    $("tieto").textContent = parts.join("  ·  ");
+}
 
 let door = null;
 
-function frameCamera() {
+let flight = null;
+let dirty = true;
+
+function invalidate() {
+    dirty = true;
+}
+
+function cameraPose() {
     const s = readSpec();
-    const cx = (s.leveys || 1480) * 0.0005;
-    const cy = (s.korkeus || 2310) * 0.0005;
-    controls.target.set(cx, cy, -0.03);
-    camera.position.set(cx - 0.55, cy * 0.58, 3.55);
-    key.target.position.set(cx, cy, 0);
-    controls.update();
+    const L = (s.leveys || 1480) / 1000;
+    const H = (s.korkeus || 2310) / 1000;
+    const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const fitH = (H * 0.5) / tanHalf * 1.34;
+    const fitW = (L * 0.5) / (tanHalf * camera.aspect) * 1.45;
+    const dist = Math.max(fitH, fitW) * (viewMode === "seina" ? 1.25 : 1);
+    const target = new THREE.Vector3(L / 2, H * 0.47, -0.03);
+    const dir = new THREE.Vector3(-0.2, -0.02, 1).normalize();
+    return { target, position: target.clone().addScaledVector(dir, dist) };
+}
+
+function frameCamera(animate) {
+    const pose = cameraPose();
+    if (!animate) {
+        flight = null;
+        camera.position.copy(pose.position);
+        controls.target.copy(pose.target);
+        controls.update();
+        return;
+    }
+    flight = {
+        p0: camera.position.clone(),
+        t0: controls.target.clone(),
+        p1: pose.position,
+        t1: pose.target,
+        start: performance.now(),
+        duration: 1100
+    };
+}
+
+function stepFlight(now) {
+    if (!flight) return;
+    const k = Math.min(1, (now - flight.start) / flight.duration);
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e);
+    controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
 }
 
 function rebuild() {
@@ -1086,23 +1630,76 @@ function rebuild() {
     $("virhe").hidden = !msg;
     $("virhe").textContent = msg;
     if (dim) return;
-    steel.color.set(spec.vari);
+    mats.steel.color.set(spec.vari);
+    mats.hinge.color.set(spec.vari);
     if (door) {
         scene.remove(door);
-        door.traverse((obj) => {
-            if (obj.geometry) obj.geometry.dispose();
-        });
+        disposeGeometry(door);
     }
-    door = buildDoor(spec, steel, kick, glassMat, gapMat, silver, brass, pull);
+    door = buildDoor(spec, mats);
     scene.add(door);
+    updateStage(spec);
+    updateInfo(spec);
+    renderer.shadowMap.needsUpdate = true;
+    invalidate();
 }
 
 function resize() {
     const w = host.clientWidth;
     const h = host.clientHeight;
+    const ratio = Math.min(Math.max(window.devicePixelRatio, 1.5), 2);
+    renderer.setPixelRatio(ratio);
     renderer.setSize(w, h, false);
+    composer.setPixelRatio(ratio);
+    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    invalidate();
+}
+
+function withTextures(fn) {
+    if (!texturesPending()) {
+        fn();
+        return;
+    }
+    kehys.classList.add("lataa");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        fn();
+        kehys.classList.remove("lataa");
+    }));
+}
+
+function setView(mode) {
+    viewMode = mode;
+    $("seinaValinta").hidden = mode !== "seina";
+    withTextures(() => {
+        rebuild();
+        frameCamera(true);
+    });
+}
+
+function setWall(type) {
+    wallType = type;
+    withTextures(rebuild);
+}
+
+function saveImage() {
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    const ratio = Math.min(4, Math.max(2, 3200 / w));
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    composer.setPixelRatio(ratio);
+    composer.setSize(w, h);
+    composer.render();
+    const url = renderer.domElement.toDataURL("image/png");
+    resize();
+    const s = readSpec();
+    const ral = $("ral").value.replace(/\D/g, "");
+    const link = document.createElement("a");
+    link.download = "janisol-" + Math.round(s.leveys) + "x" + Math.round(s.korkeus) + (RAL[ral] ? "-ral" + ral : "") + ".png";
+    link.href = url;
+    link.click();
 }
 
 document.getElementById("mitat").addEventListener("input", (event) => {
@@ -1131,13 +1728,38 @@ $("oviaukko").addEventListener("blur", () => {
 
 $("siirra").addEventListener("click", siirra);
 
+document.querySelectorAll('input[name="nakymatila"]').forEach((input) => {
+    input.addEventListener("change", () => setView(input.value));
+});
+document.querySelectorAll('input[name="seina"]').forEach((input) => {
+    input.addEventListener("change", () => setWall(input.value));
+});
+$("palauta").addEventListener("click", () => frameCamera(true));
+$("tallenna").addEventListener("click", saveImage);
+controls.addEventListener("start", () => {
+    flight = null;
+});
+controls.addEventListener("change", invalidate);
+
 window.addEventListener("resize", resize);
 restore3dIfAny();
-rebuild();
-frameCamera();
+$("seinaValinta").hidden = viewMode !== "seina";
 resize();
+rebuild();
+frameCamera(false);
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((now) => {
+    if (flight) {
+        stepFlight(now);
+        invalidate();
+    }
     controls.update();
-    renderer.render(scene, camera);
+    if (camera.position.y < 0.04) {
+        camera.position.y = 0.04;
+        invalidate();
+    }
+    if (!dirty) return;
+    dirty = false;
+    composer.render();
+    if (!kehys.classList.contains("valmis")) kehys.classList.add("valmis");
 });
