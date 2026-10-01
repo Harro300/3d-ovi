@@ -72,11 +72,11 @@
         return '<g transform="translate(' + x + ',' + y + ') scale(1,-1)">' +
             '<text x="0" y="0"' + rot +
             ' text-anchor="middle" dominant-baseline="central" font-size="' + DIM_FONT +
-            '" font-family="Arial, sans-serif" fill="' + INK + '">' + esc(s) + '</text></g>';
+            '" font-weight="bold" font-family="Arial, sans-serif" fill="' + INK + '">' + esc(s) + '</text></g>';
     }
 
     function labelHalf(label) {
-        return String(label).length * DIM_FONT * 0.31 + 12;
+        return String(label).length * DIM_FONT * 0.34 + 12;
     }
 
     function brokenH(x1, x2, y, label) {
@@ -131,8 +131,9 @@
         return brokenH(x1, x2, y, String(label)) + tickH(x1, y, 9) + tickH(x2, y, 9);
     }
 
-    function dimInsideV(g, label) {
-        var x = g.x + g.w - Math.min(42, g.w * 0.18);
+    function dimInsideV(g, label, hingeSide) {
+        var inset = Math.min(42, g.w * 0.18);
+        var x = hingeSide === 'vasen' ? g.x + inset : g.x + g.w - inset;
         var y1 = g.y + 28;
         var y2 = g.y + g.h - 28;
         return brokenV(x, y1, y2, String(label)) + tickV(x, y1, 9) + tickV(x, y2, 9);
@@ -237,7 +238,7 @@
             parts.push(glassBend(leaf.glass, leaf.hingeSide));
             if (leaf.active) parts.push(handMark(leaf.glass, leaf.hingeSide));
             parts.push(dimInsideH(leaf.glass, Math.round(leaf.glass.w)));
-            if (leaf.active) parts.push(dimInsideV(leaf.glass, Math.round(leaf.glass.h)));
+            if (leaf.active) parts.push(dimInsideV(leaf.glass, Math.round(leaf.glass.h), leaf.hingeSide));
         }
         return parts.join('');
     }
