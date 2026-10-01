@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jansen Janisol</title>
-    <link rel="stylesheet" href="ovi3d.css?v=38">
+    <link rel="stylesheet" href="ovi3d.css?v=40">
 </head>
 <body>
     <div class="tausta" aria-hidden="true"></div>
@@ -81,7 +81,7 @@
                     <div class="segmentti" id="seinaValinta" role="radiogroup" aria-label="Seinä" hidden>
                         <label><input type="radio" name="seina" value="betoni" checked><span>Betoni</span></label>
                         <label><input type="radio" name="seina" value="rappaus"><span>Rappaus</span></label>
-                        <label><input type="radio" name="seina" value="tiili"><span>Tiili</span></label>
+                        <label><input type="radio" name="seina" value="kerrostalo"><span>Kerrostalo</span></label>
                     </div>
                     <button type="button" class="ikoni" id="palauta" title="Palauta kuvakulma" aria-label="Palauta kuvakulma">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>
@@ -99,11 +99,11 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+            "three": "./vendor/three/build/three.module.min.js",
+            "three/addons/": "./vendor/three/examples/jsm/"
         }
     }
     </script>
-    <script type="module" src="ovi3d.js?v=38"></script>
+    <script type="module" src="ovi3d.js?v=40"></script>
 </body>
 </html>

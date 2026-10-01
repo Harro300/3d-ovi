@@ -1,6 +1,6 @@
 :root {
     --tausta: #0a0b0d;
-    --paneeli: rgba(17, 18, 21, 0.72);
+    --paneeli: rgba(17, 18, 21, 0.8);
     --viiva: rgba(255, 255, 255, 0.08);
     --viiva-vahva: rgba(255, 255, 255, 0.14);
     --teksti: #eceae6;
@@ -133,8 +133,6 @@ form {
     box-shadow:
         0 30px 70px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
 }
 
 .osio {
@@ -469,9 +467,7 @@ input[type="color"]::-webkit-color-swatch {
 .segmentti,
 .ikoni {
     border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(14, 15, 18, 0.62);
-    backdrop-filter: blur(14px) saturate(1.2);
-    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    background: rgba(14, 15, 18, 0.84);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
@@ -585,9 +581,7 @@ input[type="color"]::-webkit-color-swatch {
     padding: 10px 16px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(14, 15, 18, 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(14, 15, 18, 0.88);
     font-size: 0.8rem;
     color: var(--teksti-2);
     transform: translate(-50%, -50%);

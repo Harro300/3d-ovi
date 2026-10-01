@@ -5,6 +5,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+import { computeSurface } from "./pinnat.js?v=40";
 
 const KARMI = 40;
 const PUITE = 87.5;
@@ -46,7 +47,7 @@ let typeError = "";
 let openingLock = null;
 let viewMode = "studio";
 let wallType = "betoni";
-const WALL_TYPES = ["betoni", "rappaus", "tiili"];
+const WALL_TYPES = ["betoni", "rappaus", "kerrostalo"];
 
 function doorType() {
     const picked = document.querySelector('input[name="tyyppi"]:checked');
@@ -482,7 +483,8 @@ function restore3dIfAny() {
     setDoorType(saved.tyyppi === "kayntiovi" ? "kayntiovi" : "pariovi");
     setHand(saved.katisyys === "vasen" ? "vasen" : "oikea");
     viewMode = saved.nakyma === "seina" ? "seina" : "studio";
-    if (WALL_TYPES.includes(saved.seina)) wallType = saved.seina;
+    const savedWall = saved.seina === "tiili" ? "kerrostalo" : saved.seina;
+    if (WALL_TYPES.includes(savedWall)) wallType = savedWall;
     setRadio("nakymatila", viewMode);
     setRadio("seina", wallType);
     const parsed = parseOpening($("oviaukko").value);
@@ -996,47 +998,6 @@ function buildDoor(spec, m) {
     return group;
 }
 
-function hash(ix, iy, seed) {
-    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed, 1442695041);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-}
-
-function noise(x, y, px, py, seed) {
-    const xi = Math.floor(x);
-    const yi = Math.floor(y);
-    const fx = x - xi;
-    const fy = y - yi;
-    const x0 = ((xi % px) + px) % px;
-    const y0 = ((yi % py) + py) % py;
-    const x1 = (x0 + 1) % px;
-    const y1 = (y0 + 1) % py;
-    const u = fx * fx * (3 - 2 * fx);
-    const v = fy * fy * (3 - 2 * fy);
-    const a = hash(x0, y0, seed);
-    const b = hash(x1, y0, seed);
-    const c = hash(x0, y1, seed);
-    const d = hash(x1, y1, seed);
-    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
-
-function fbm(x, y, px, py, octaves, seed) {
-    let sum = 0;
-    let amp = 0.5;
-    let norm = 0;
-    for (let o = 0; o < octaves; o++) {
-        sum += amp * noise(x, y, px, py, seed + o * 17);
-        norm += amp;
-        x *= 2;
-        y *= 2;
-        px *= 2;
-        py *= 2;
-        amp *= 0.5;
-    }
-    return sum / norm;
-}
-
 function dataTexture(data, w, h, srgb) {
     const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
     tex.wrapS = THREE.RepeatWrapping;
@@ -1050,224 +1011,171 @@ function dataTexture(data, w, h, srgb) {
     return tex;
 }
 
-// Tileable maps: `fill` writes height (mm), roughness and optional sRGB albedo per pixel.
-function surfaceMaps(w, h, spanU, spanV, fill, withColor) {
-    const n = w * h;
-    const height = new Float32Array(n);
-    const rough = new Float32Array(n);
-    const albedo = withColor ? new Float32Array(n * 3) : null;
-    for (let y = 0, i = 0; y < h; y++) {
-        for (let x = 0; x < w; x++, i++) fill(x / w, y / h, x, y, i, height, rough, albedo);
-    }
-    const sx = 1 / (2 * spanU / w);
-    const sy = 1 / (2 * spanV / h);
-    const normal = new Uint8Array(n * 4);
-    const roughData = new Uint8Array(n * 4);
-    const colorData = withColor ? new Uint8Array(n * 4) : null;
-    for (let y = 0; y < h; y++) {
-        const row = y * w;
-        const prev = ((y - 1 + h) % h) * w;
-        const next = ((y + 1) % h) * w;
-        for (let x = 0; x < w; x++) {
-            const i = row + x;
-            const dx = (height[row + (x + 1) % w] - height[row + (x - 1 + w) % w]) * sx;
-            const dy = (height[next + x] - height[prev + x]) * sy;
-            const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
-            const o = i * 4;
-            normal[o] = (-dx * inv * 0.5 + 0.5) * 255;
-            normal[o + 1] = (-dy * inv * 0.5 + 0.5) * 255;
-            normal[o + 2] = (inv * 0.5 + 0.5) * 255;
-            normal[o + 3] = 255;
-            const r = Math.min(1, Math.max(0, rough[i])) * 255;
-            roughData[o] = r;
-            roughData[o + 1] = r;
-            roughData[o + 2] = r;
-            roughData[o + 3] = 255;
-            if (colorData) {
-                colorData[o] = Math.min(1, albedo[i * 3]) * 255;
-                colorData[o + 1] = Math.min(1, albedo[i * 3 + 1]) * 255;
-                colorData[o + 2] = Math.min(1, albedo[i * 3 + 2]) * 255;
-                colorData[o + 3] = 255;
-            }
-        }
-    }
-    const maps = {
-        normalMap: dataTexture(normal, w, h, false),
-        roughnessMap: dataTexture(roughData, w, h, false)
+// Surface maps are computed in a worker (pinnat.js) and cached; `surface(name)` is synchronous
+// and only valid after `loadSurfaces` has resolved for that name.
+const surfaces = {};
+const surfaceJobs = {};
+let surfaceWorker = null;
+let surfaceJobId = 0;
+const surfaceReplies = new Map();
+try {
+    surfaceWorker = new Worker(new URL("./pinnat-tyo.js?v=40", import.meta.url), { type: "module" });
+    surfaceWorker.onmessage = (event) => {
+        surfaceReplies.get(event.data.id)?.resolve(event.data.result);
+        surfaceReplies.delete(event.data.id);
     };
-    if (colorData) maps.map = dataTexture(colorData, w, h, true);
+    surfaceWorker.onerror = () => {
+        surfaceWorker = null;
+        surfaceReplies.forEach((job) => job.fallback());
+        surfaceReplies.clear();
+    };
+} catch {
+    surfaceWorker = null;
+}
+
+function computeInWorker(name, args) {
+    const local = () => computeSurface(name, args);
+    if (!surfaceWorker) return Promise.resolve().then(local);
+    return new Promise((resolve) => {
+        const id = ++surfaceJobId;
+        surfaceReplies.set(id, { resolve, fallback: () => resolve(local()) });
+        surfaceWorker.postMessage({ id, name, args });
+    });
+}
+
+function toMaps(raw) {
+    const maps = {
+        normalMap: dataTexture(raw.normal, raw.w, raw.h, false),
+        roughnessMap: dataTexture(raw.rough, raw.w, raw.h, false)
+    };
+    if (raw.color) maps.map = dataTexture(raw.color, raw.w, raw.h, true);
+    Object.values(maps).forEach((tex) => tex.repeat.set(raw.repeat[0], raw.repeat[1]));
     return maps;
 }
 
-function setRepeat(maps, u, v) {
-    Object.values(maps).forEach((tex) => tex.repeat.set(u, v));
-    return maps;
-}
-
-function powderCoatMaps() {
-    const span = 30;
-    const maps = surfaceMaps(512, 512, span, span, (u, v, x, y, i, height, rough) => {
-        const peel = fbm(u * 14, v * 14, 14, 14, 4, 5);
-        const fine = noise(u * 96, v * 96, 96, 96, 9);
-        height[i] = (peel - 0.5) * 0.045 + (fine - 0.5) * 0.006;
-        rough[i] = 0.64 + (fine - 0.5) * 0.08 + (peel - 0.5) * 0.06;
-    }, false);
-    return setRepeat(maps, 1 / span, 1 / span);
-}
-
-function brushedMaps() {
-    const span = 160;
-    const maps = surfaceMaps(512, 512, span, span, (u, v, x, y, i, height, rough, albedo) => {
-        const band = fbm(u * 1, v * 24, 1, 24, 3, 45);
-        const streak = fbm(u * 2, v * 96, 2, 96, 3, 41);
-        const line = noise(u * 4, v * 512, 4, 512, 43);
-        const s = band * 0.4 + streak * 0.35 + line * 0.25;
-        height[i] = (s - 0.5) * 0.004;
-        rough[i] = 0.3 + s * 0.2;
-        const c = 0.86 + (s - 0.5) * 0.22;
-        albedo[i * 3] = c;
-        albedo[i * 3 + 1] = c;
-        albedo[i * 3 + 2] = c;
-    }, true);
-    return setRepeat(maps, 1 / span, 1 / span);
-}
-
-function concreteMaps() {
-    const sx = 2400;
-    const sy = 1200;
-    const maps = surfaceMaps(1024, 512, sx, sy, (u, v, x, y, i, height, rough, albedo) => {
-        const xm = u * sx;
-        const ym = v * sy;
-        const cloud = fbm(u * 6, v * 3, 6, 3, 4, 11);
-        const mid = fbm(u * 96, v * 48, 96, 48, 2, 23);
-        const fine = noise(u * 480, v * 240, 480, 240, 31);
-        let hgt = (mid - 0.5) * 0.35 + (fine - 0.5) * 0.25;
-        let tone = 0.84 + cloud * 0.26 + (mid - 0.5) * 0.08 + (fine - 0.5) * 0.05;
-        let r = 0.86 + (fine - 0.5) * 0.08;
-        const edge = Math.min(xm, sx - xm, ym, sy - ym);
-        if (edge < 2.4) {
-            hgt += 0.5;
-            tone *= 0.88;
-        } else if (edge < 40) {
-            tone *= 0.96 + edge * 0.001;
+function loadSurfaces(names) {
+    return Promise.all(names.map((name) => {
+        if (!surfaceJobs[name]) {
+            const args = name === "lattia" ? [FLOOR_SIZE] : [];
+            surfaceJobs[name] = computeInWorker(name, args).then((raw) => {
+                surfaces[name] = toMaps(raw);
+            });
         }
-        const d = Math.hypot((xm % 600) - 300, (ym % 600) - 300);
-        if (d < 11) {
-            hgt -= 7 * (1 - d / 11);
-            tone *= 0.5 + d * 0.02;
-            r = 0.95;
-        } else if (d < 15) {
-            hgt -= 0.4;
-            tone *= 0.92;
-        }
-        const pcx = Math.floor(xm / 4);
-        const pcy = Math.floor(ym / 4);
-        const ph = hash(pcx, pcy, 77);
-        if (ph < 0.045) {
-            const jx = (pcx + 0.5) * 4 + (hash(pcx, pcy, 78) - 0.5) * 2;
-            const jy = (pcy + 0.5) * 4 + (hash(pcx, pcy, 79) - 0.5) * 2;
-            const pr = 1 + ph * 30;
-            const pd = Math.hypot(xm - jx, ym - jy);
-            if (pd < pr) {
-                hgt -= 0.8 * (1 - pd / pr);
-                tone *= 0.62;
-            }
-        }
-        height[i] = hgt;
-        rough[i] = r;
-        albedo[i * 3] = 0.55 * tone;
-        albedo[i * 3 + 1] = 0.545 * tone;
-        albedo[i * 3 + 2] = 0.53 * tone;
-    }, true);
-    return setRepeat(maps, 1000 / sx, 1000 / sy);
+        return surfaceJobs[name];
+    }));
 }
 
-function plasterMaps() {
-    const span = 1000;
-    const maps = surfaceMaps(1024, 1024, span, span, (u, v, x, y, i, height, rough, albedo) => {
-        const wave = fbm(u * 5, v * 5, 5, 5, 3, 51);
-        const grain = fbm(u * 320, v * 320, 320, 320, 2, 53);
-        const sand = hash(x, y, 57);
-        height[i] = (wave - 0.5) * 1.2 + (grain - 0.5) * 0.55 + (sand - 0.5) * 0.18;
-        const tone = 0.95 + (wave - 0.5) * 0.07 + (grain - 0.5) * 0.07 + (sand - 0.5) * 0.035;
-        rough[i] = 0.93 + (grain - 0.5) * 0.06;
-        albedo[i * 3] = 0.7 * tone;
-        albedo[i * 3 + 1] = 0.69 * tone;
-        albedo[i * 3 + 2] = 0.665 * tone;
-    }, true);
-    return setRepeat(maps, 1000 / span, 1000 / span);
+function surface(name) {
+    return surfaces[name];
 }
 
-// Finnish brick 285 x 85 mm face, 15 mm joints, running bond.
-function brickMaps() {
-    const span = 2400;
-    const spanY = 1200;
-    const maps = surfaceMaps(1536, 768, span, spanY, (u, v, x, y, i, height, rough, albedo) => {
-        const xm = u * span;
-        const ym = v * spanY;
-        const row = Math.floor(ym / 100);
-        const xr = (xm + (row % 2) * 150) % span;
-        const col = Math.floor(xr / 300);
-        const lx = xr - col * 300;
-        const ly = ym - row * 100;
-        const edge = Math.min(lx - 7.5, 292.5 - lx, ly - 7.5, 92.5 - ly);
-        const grain = noise(u * 840, v * 420, 840, 420, 61);
-        const o = i * 3;
-        if (edge > 0) {
-            const id = hash(col, row, 63);
-            const warm = hash(col, row, 64) - 0.5;
-            const dark = hash(col, row, 65) < 0.14;
-            const blot = fbm(u * 48, v * 24, 48, 24, 3, 67 + col);
-            const bright = 0.78 + id * 0.3;
-            let t = (0.88 + blot * 0.24 + (grain - 0.5) * 0.12) * bright;
-            if (dark) t *= 0.66;
-            const sp = hash(x, y, 69);
-            if (sp < 0.018) t *= 0.62;
-            else if (sp > 0.993) t *= 1.3;
-            const round = edge < 3 ? (3 - edge) * (3 - edge) * 0.28 : 0;
-            height[i] = (blot - 0.5) * 0.8 + (grain - 0.5) * 0.35 - round;
-            rough[i] = 0.82 + (grain - 0.5) * 0.1;
-            albedo[o] = 0.4 * t * (1 + warm * 0.08);
-            albedo[o + 1] = 0.225 * t * (1 + warm * 0.16);
-            albedo[o + 2] = 0.18 * t * (1 + warm * 0.04);
-        } else {
-            const sand = hash(x, y, 71);
-            const ao = 0.72 + 0.28 * Math.min(1, -edge / 4);
-            const t = (0.94 + (grain - 0.5) * 0.14 + (sand - 0.5) * 0.08) * ao;
-            height[i] = -5 + (grain - 0.5) * 0.6 + (sand - 0.5) * 0.2;
-            rough[i] = 0.96;
-            albedo[o] = 0.52 * t;
-            albedo[o + 1] = 0.505 * t;
-            albedo[o + 2] = 0.48 * t;
-        }
-    }, true);
-    return setRepeat(maps, 1000 / span, 1000 / spanY);
+const doorSurfaces = loadSurfaces(["pulveri", "harjattu"]);
+
+function textTexture(text, w, h, font, color, background) {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (background) {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, w, h);
+    }
+    ctx.fillStyle = color;
+    ctx.font = font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, w / 2, h / 2 + h * 0.03);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = maxAniso;
+    return tex;
 }
 
-function floorMaps(sizeM) {
-    const span = 3000;
-    const maps = surfaceMaps(1024, 1024, span, span, (u, v, x, y, i, height, rough, albedo) => {
-        const cloud = fbm(u * 6, v * 6, 6, 6, 4, 81);
-        const sheen = fbm(u * 4, v * 4, 4, 4, 3, 85);
-        const mid = fbm(u * 60, v * 60, 60, 60, 2, 83);
-        let tone = 0.8 + cloud * 0.34 + (mid - 0.5) * 0.08;
-        const cx = Math.floor(u * 300);
-        const cy = Math.floor(v * 300);
-        const ah = hash(cx, cy, 87);
-        if (ah < 0.4) {
-            const jx = (cx + 0.5 + (hash(cx, cy, 88) - 0.5) * 0.5) * 10;
-            const jy = (cy + 0.5 + (hash(cx, cy, 89) - 0.5) * 0.5) * 10;
-            const r = 1.5 + ah * 6;
-            if (Math.hypot(u * span - jx, v * span - jy) < r) tone *= 0.78 + hash(cx, cy, 90) * 0.5;
+// Warm room glow seen through a window: brighter towards the ceiling lamp, darker at the sill.
+function litWindowTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    const v = ctx.createLinearGradient(0, 0, 0, 128);
+    v.addColorStop(0, "#ffffff");
+    v.addColorStop(0.55, "#a8a8a8");
+    v.addColorStop(1, "#4a4a4a");
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, 128, 128);
+    const r = ctx.createRadialGradient(80, 20, 4, 80, 20, 110);
+    r.addColorStop(0, "rgba(255,255,255,0.55)");
+    r.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = r;
+    ctx.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+// Intercom face: colour layer and a glow layer for the display and key backlights.
+function intercomTextures() {
+    const w = 256;
+    const h = 512;
+    const face = document.createElement("canvas");
+    const glow = document.createElement("canvas");
+    face.width = glow.width = w;
+    face.height = glow.height = h;
+    const f = face.getContext("2d");
+    const g = glow.getContext("2d");
+    const metal = f.createLinearGradient(0, 0, w, h);
+    metal.addColorStop(0, "#b9bdc1");
+    metal.addColorStop(0.5, "#d2d5d8");
+    metal.addColorStop(1, "#aeb2b6");
+    f.fillStyle = metal;
+    f.fillRect(0, 0, w, h);
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, w, h);
+    f.fillStyle = "#1c1f22";
+    for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 7; c++) {
+            f.beginPath();
+            f.arc(56 + c * 24, 44 + r * 18, 4, 0, Math.PI * 2);
+            f.fill();
         }
-        height[i] = (mid - 0.5) * 0.08;
-        rough[i] = 0.34 + sheen * 0.28 + (mid - 0.5) * 0.06;
-        albedo[i * 3] = 0.35 * tone;
-        albedo[i * 3 + 1] = 0.345 * tone;
-        albedo[i * 3 + 2] = 0.34 * tone;
-    }, true);
-    const k = sizeM * 1000 / span;
-    return setRepeat(maps, k, k);
+    }
+    f.fillStyle = "#0b0e12";
+    f.fillRect(40, 172, 176, 92);
+    g.fillStyle = "#3d6f9e";
+    g.fillRect(44, 176, 168, 84);
+    g.fillStyle = "#cfe6ff";
+    g.font = "600 22px Segoe UI, sans-serif";
+    g.textAlign = "center";
+    g.fillText("TERVETULOA", w / 2, 212);
+    g.font = "400 16px Segoe UI, sans-serif";
+    g.fillText("Valitse asukas", w / 2, 240);
+    const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+    keys.forEach((label, k) => {
+        const cx = 72 + (k % 3) * 56;
+        const cy = 304 + Math.floor(k / 3) * 46;
+        f.fillStyle = "#9fa4a9";
+        f.beginPath();
+        f.arc(cx, cy, 17, 0, Math.PI * 2);
+        f.fill();
+        f.strokeStyle = "#7c8186";
+        f.lineWidth = 2;
+        f.stroke();
+        f.fillStyle = "#2a2d31";
+        f.font = "600 16px Segoe UI, sans-serif";
+        f.textAlign = "center";
+        f.textBaseline = "middle";
+        f.fillText(label, cx, cy + 1);
+        g.strokeStyle = "#5a86b0";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(cx, cy, 17, 0, Math.PI * 2);
+        g.stroke();
+    });
+    const map = new THREE.CanvasTexture(face);
+    map.colorSpace = THREE.SRGBColorSpace;
+    const emissiveMap = new THREE.CanvasTexture(glow);
+    emissiveMap.colorSpace = THREE.SRGBColorSpace;
+    return { map, emissiveMap };
 }
 
 function studioEnvironment() {
@@ -1326,11 +1234,12 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.rotateSpeed = 0.7;
 controls.minDistance = 0.35;
-controls.maxDistance = 8;
+controls.maxDistance = 14;
 controls.maxPolarAngle = 1.72;
 
 RectAreaLightUniformsLib.init();
-scene.add(new THREE.HemisphereLight(0xeef1f4, 0x28282a, 0.3));
+const hemi = new THREE.HemisphereLight(0xeef1f4, 0x28282a, 0.3);
+scene.add(hemi);
 const softbox = new THREE.RectAreaLight(0xfffbf7, 5, 2.6, 1.8);
 scene.add(softbox);
 const key = new THREE.SpotLight(0xfffaf3, 60, 0, 0.52, 1, 2);
@@ -1348,6 +1257,8 @@ const fill = new THREE.DirectionalLight(0xdde6f2, 0.32);
 scene.add(fill, fill.target);
 const rim = new THREE.DirectionalLight(0xffffff, 0.55);
 scene.add(rim, rim.target);
+const canopyLight = new THREE.SpotLight(0xffd9b0, 0, 0, 1.15, 0.9, 2);
+scene.add(canopyLight, canopyLight.target);
 
 const composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
 const composer = new EffectComposer(renderer, composerTarget);
@@ -1359,8 +1270,9 @@ gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings
 composer.addPass(gtao);
 composer.addPass(new OutputPass());
 
-const peel = powderCoatMaps();
-const brushed = brushedMaps();
+await doorSurfaces;
+const peel = surface("pulveri");
+const brushed = surface("harjattu");
 
 const mats = {
     steel: new THREE.MeshPhysicalMaterial({
@@ -1474,7 +1386,8 @@ const WALL_UV = {
 };
 
 function extrudeWorld(pts, zFront, depth, material) {
-    const geom = new THREE.ExtrudeGeometry(shapeFrom(pts), { depth, bevelEnabled: false, UVGenerator: WALL_UV });
+    const shape = Array.isArray(pts) ? shapeFrom(pts) : pts;
+    const geom = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, UVGenerator: WALL_UV });
     geom.translate(0, 0, zFront - depth);
     const mesh = new THREE.Mesh(geom, material);
     mesh.castShadow = true;
@@ -1482,26 +1395,200 @@ function extrudeWorld(pts, zFront, depth, material) {
     return mesh;
 }
 
-const WALL_MAKERS = { betoni: concreteMaps, rappaus: plasterMaps, tiili: brickMaps };
 const wallMats = {};
 let floorMat = null;
+let entranceMats = null;
+const NIGHT_BG = 0x0a0d14;
 const FLOOR_SIZE = 26;
 const sealantMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.75, metalness: 0 });
 
 function wallMaterial(type) {
     if (!wallMats[type]) {
-        wallMats[type] = new THREE.MeshStandardMaterial({ ...WALL_MAKERS[type](), roughness: 1, metalness: 0 });
+        wallMats[type] = new THREE.MeshStandardMaterial({ ...surface(type), roughness: 1, metalness: 0 });
     }
     return wallMats[type];
 }
 
 function floorMaterial() {
-    if (!floorMat) floorMat = new THREE.MeshStandardMaterial({ ...floorMaps(FLOOR_SIZE), roughness: 1, metalness: 0 });
+    if (!floorMat) floorMat = new THREE.MeshStandardMaterial({ ...surface("lattia"), roughness: 1, metalness: 0 });
     return floorMat;
 }
 
+function isEntrance() {
+    return viewMode === "seina" && wallType === "kerrostalo";
+}
+
+function neededSurfaces() {
+    if (viewMode !== "seina") return [];
+    return wallType === "kerrostalo" ? ["rappaus", "paneeli"] : [wallType, "lattia"];
+}
+
 function texturesPending() {
-    return viewMode === "seina" && (!wallMats[wallType] || !floorMat);
+    return neededSurfaces().some((name) => !surfaces[name]);
+}
+
+function entranceHeight(H) {
+    return Math.max(H + 0.55, 2.7);
+}
+
+function entranceMaterials() {
+    if (entranceMats) return entranceMats;
+    const intercom = intercomTextures();
+    entranceMats = {
+        panel: new THREE.MeshStandardMaterial({ ...surface("paneeli"), roughness: 1, metalness: 0 }),
+        canopy: new THREE.MeshStandardMaterial({ color: 0x232528, roughness: 0.55, metalness: 0.5 }),
+        slab: new THREE.MeshStandardMaterial({ color: 0x8c8984, roughness: 0.88, metalness: 0 }),
+        ground: new THREE.MeshStandardMaterial({ color: 0x2a2b2d, roughness: 0.95, metalness: 0 }),
+        doormat: new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 1, metalness: 0 }),
+        plinth: new THREE.MeshStandardMaterial({ color: 0x4c4e51, roughness: 0.9, metalness: 0 }),
+        frame: new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.5, metalness: 0.4 }),
+        window: new THREE.MeshPhysicalMaterial({ color: 0x151a22, roughness: 0.04, metalness: 0, specularIntensity: 1 }),
+        windowLit: new THREE.MeshStandardMaterial({
+            color: 0x1a140e,
+            emissive: 0xffd2a0,
+            emissiveMap: litWindowTexture(),
+            emissiveIntensity: 0.42,
+            roughness: 0.3
+        }),
+        lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe2bd).multiplyScalar(4) }),
+        room: new THREE.MeshStandardMaterial({ color: 0xd2cabd, roughness: 0.92, emissive: 0x6e5840, side: THREE.BackSide }),
+        stair: new THREE.MeshStandardMaterial({ color: 0xa39d93, roughness: 0.8, emissive: 0x3a2e20 }),
+        steelPlate: new THREE.MeshPhysicalMaterial({ color: 0xcfd2d5, roughness: 0.32, metalness: 1 }),
+        intercom: new THREE.MeshStandardMaterial({
+            map: intercom.map,
+            emissiveMap: intercom.emissiveMap,
+            emissive: 0xffffff,
+            emissiveIntensity: 1.2,
+            roughness: 0.35,
+            metalness: 0.6
+        }),
+        letter: new THREE.MeshStandardMaterial({ color: 0xe6e4df, roughness: 0.45, metalness: 0.1, emissive: 0x24211c }),
+        number: new THREE.MeshStandardMaterial({
+            map: textTexture("12", 256, 128, "600 84px Segoe UI, sans-serif", "#e9e7e2", "#202225"),
+            roughness: 0.5,
+            metalness: 0.3
+        })
+    };
+    return entranceMats;
+}
+
+function worldBox(group, x0, y0, z0, x1, y1, z1, material, castShadow = true) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), material);
+    mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+}
+
+function worldPlane(group, w, h, x, y, z, material) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+    mesh.position.set(x, y, z);
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+}
+
+function addLamp(group, x, y, z, material) {
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(0.045, 24), material);
+    disk.rotation.x = Math.PI / 2;
+    disk.position.set(x, y - 0.002, z);
+    group.add(disk);
+}
+
+// Apartment building entrance: the door sits at the back of a clad recess under a canopy.
+// Facade face is at z = D, the door front at z = 0, the landing top at the threshold (y = 0).
+function buildEntranceSet(spec) {
+    const m = entranceMaterials();
+    const L = spec.leveys / 1000;
+    const H = spec.korkeus / 1000;
+    const cx = L / 2;
+    const j = 0.01;
+    const D = 1.2;
+    const F = 0.3;
+    const rx0 = -0.8;
+    const rx1 = L + 0.8;
+    const RH = entranceHeight(H);
+    const G = -0.15;
+    const fx0 = cx - 7.5;
+    const fx1 = cx + 7.5;
+    const FH = 6.8;
+    const group = new THREE.Group();
+
+    const facade = shapeFrom([[fx0, G], [rx0, G], [rx0, RH], [rx1, RH], [rx1, G], [fx1, G], [fx1, FH], [fx0, FH]]);
+    const wl = rx0 - 2.7;
+    const wr = rx1 + 1.0;
+    const windows = [
+        [wl, 0.85, false], [wr, 0.85, true], [wl - 2.6, 0.85, false], [wr + 2.6, 0.85, false],
+        [wl, 3.75, true], [wr, 3.75, false], [wl - 2.6, 3.75, false], [wr + 2.6, 3.75, true]
+    ].map(([x, y, lit]) => [x, y, 1.7, 1.5, lit]);
+    windows.push([cx - 0.55, RH + 0.75, 1.1, 2.6, true]);
+    windows.forEach(([x, y, w, h]) => {
+        facade.holes.push(new THREE.Path([V2(x, y), V2(x + w, y), V2(x + w, y + h), V2(x, y + h)]));
+    });
+    group.add(extrudeWorld(facade, D, F, wallMaterial("rappaus")));
+    windows.forEach(([x, y, w, h, lit]) => {
+        const zf = D - 0.08;
+        const t = 0.06;
+        worldBox(group, x, y, zf - 0.08, x + w, y + t, zf, m.frame, false);
+        worldBox(group, x, y + h - t, zf - 0.08, x + w, y + h, zf, m.frame, false);
+        worldBox(group, x, y + t, zf - 0.08, x + t, y + h - t, zf, m.frame, false);
+        worldBox(group, x + w - t, y + t, zf - 0.08, x + w, y + h - t, zf, m.frame, false);
+        if (w > 1.5) worldBox(group, x + w / 2 - t / 2, y + t, zf - 0.08, x + w / 2 + t / 2, y + h - t, zf, m.frame, false);
+        worldPlane(group, w - 2 * t, h - 2 * t, x + w / 2, y + h / 2, zf - 0.05, lit ? m.windowLit : m.window);
+    });
+    worldBox(group, fx0, G, D, rx0, 0.35, D + 0.02, m.plinth, false);
+    worldBox(group, rx1, G, D, fx1, 0.35, D + 0.02, m.plinth, false);
+
+    worldBox(group, rx0 - 0.15, 0, 0, rx0, RH, D - F, m.panel);
+    worldBox(group, rx1, 0, 0, rx1 + 0.15, RH, D - F, m.panel);
+    worldBox(group, rx0, RH, 0, rx1, RH + 0.3, D - F, m.panel);
+    group.add(extrudeWorld(
+        [[rx0, 0], [-j, 0], [-j, H + j], [L + j, H + j], [L + j, 0], [rx1, 0], [rx1, RH], [rx0, RH]],
+        0, 0.2, m.panel
+    ));
+    group.add(extrudeWorld(
+        [[-j, 0], [-j, H + j], [L + j, H + j], [L + j, 0], [L, 0], [L, H], [0, H], [0, 0]],
+        -0.004, 0.192, sealantMat
+    ));
+
+    worldBox(group, rx0 - 0.6, RH, D, rx1 + 0.6, RH + 0.22, D + 1.5, m.canopy);
+    worldBox(group, rx0 - 0.6, G, -0.2, rx1 + 0.6, 0, D + 1.5, m.slab, false);
+    worldBox(group, -0.1, 0, 0.12, L + 0.1, 0.008, 1.0, m.doormat, false);
+    const ground = worldPlane(group, 30, 30, cx, G, D + 4, m.ground);
+    ground.rotation.x = -Math.PI / 2;
+
+    addLamp(group, cx, RH, 0.42, m.lamp);
+    addLamp(group, cx - 0.9, RH, D + 0.8, m.lamp);
+    addLamp(group, cx + 0.9, RH, D + 0.8, m.lamp);
+
+    const roomX0 = -1.2;
+    const roomX1 = L + 1.2;
+    const room = worldBox(group, roomX0, 0, -4, roomX1, 3, -0.21, m.room, false);
+    room.receiveShadow = false;
+    for (let i = 0; i < 9; i++) {
+        const x = roomX0 + 0.4 + i * 0.28;
+        worldBox(group, x, 0, -3.95, x + 0.28, (i + 1) * 0.17, -2.75, m.stair, false);
+    }
+    addLamp(group, cx, 3, -2.2, m.lamp);
+
+    const lockSide = spec.pair ? (spec.vasen ? -1 : 1) : (spec.vasen ? 1 : -1);
+    const ix = lockSide > 0 ? L + 0.4 : -0.4;
+    worldBox(group, ix - 0.065, 1.22, 0, ix + 0.065, 1.48, 0.014, m.steelPlate);
+    worldPlane(group, 0.122, 0.244, ix, 1.35, 0.0145, m.intercom);
+
+    const ax = rx1 + 0.35;
+    const ay = RH - 0.7;
+    const s = 0.42;
+    const letter = shapeFrom([[0, 0], [0.11, 0], [0.16, 0.14], [0.34, 0.14], [0.39, 0], [0.5, 0], [0.31, 0.5], [0.19, 0.5]]
+        .map(([x, y]) => [ax + x * s * 2, ay + y * s * 2]));
+    letter.holes.push(new THREE.Path([[0.19, 0.24], [0.31, 0.24], [0.25, 0.41]]
+        .map(([x, y]) => V2(ax + x * s * 2, ay + y * s * 2))));
+    const letterMesh = extrudeWorld(letter, D + 0.025, 0.025, m.letter);
+    letterMesh.receiveShadow = false;
+    group.add(letterMesh);
+    worldBox(group, rx0 - 0.68, RH - 0.5, D, rx0 - 0.32, RH - 0.32, D + 0.012, m.number, false);
+    return group;
 }
 
 // Door front is flush with the wall face; 10 mm installation joint on sides and top.
@@ -1538,10 +1625,14 @@ function disposeGeometry(object) {
 }
 
 let wallSet = null;
+let stageKey = "";
 
 function updateStage(spec) {
     const cx = spec.leveys / 2000;
     const cy = spec.korkeus / 2000;
+    const keyNow = [viewMode, wallType, spec.leveys, spec.korkeus, spec.pair, spec.vasen].join("|");
+    if (keyNow === stageKey) return false;
+    stageKey = keyNow;
     studioSet.visible = viewMode === "studio";
     studioSet.position.x = cx;
     if (wallSet) {
@@ -1550,17 +1641,59 @@ function updateStage(spec) {
         wallSet = null;
     }
     if (viewMode === "seina") {
-        wallSet = buildWallSet(spec);
+        wallSet = isEntrance() ? buildEntranceSet(spec) : buildWallSet(spec);
         scene.add(wallSet);
     }
+    const night = isEntrance();
+    const bg = night ? NIGHT_BG : BG;
+    scene.background.set(bg);
+    scene.fog.color.set(bg);
+    scene.fog.near = night ? 14 : 9;
+    scene.fog.far = night ? 40 : 22;
+    scene.environmentIntensity = night ? 0.16 : 0.85;
+    renderer.toneMappingExposure = night ? 1.25 : 1.1;
+    softbox.intensity = night ? 0 : 5;
     softbox.position.set(cx - 1.9, 2.9, 3.1);
     softbox.lookAt(cx, cy, 0);
-    key.position.set(cx - 2.3, 3.5, 3.6);
-    key.target.position.set(cx, cy * 0.8, 0);
-    fill.position.set(cx + 3.6, 1.6, 3);
-    fill.target.position.set(cx, cy, 0);
+    hemi.color.set(night ? 0x5d6d8c : 0xeef1f4);
+    hemi.groundColor.set(night ? 0x0d0e10 : 0x28282a);
+    hemi.intensity = night ? 0.14 : 0.3;
+    rim.intensity = night ? 0 : 0.55;
     rim.position.set(cx - 1.6, 3.2, -3.6);
     rim.target.position.set(cx, cy, 0);
+    if (night) {
+        const RH = entranceHeight(spec.korkeus / 1000);
+        key.color.set(0xffe2c4);
+        key.intensity = 10;
+        key.angle = 1.1;
+        key.penumbra = 0.85;
+        key.position.set(cx, RH - 0.03, 0.42);
+        key.target.position.set(cx, 0, 0.55);
+        key.shadow.camera.near = 0.05;
+        key.shadow.radius = 4;
+        fill.color.set(0x8ea4cc);
+        fill.intensity = 0.22;
+        fill.position.set(cx - 5, 7, 8);
+        canopyLight.intensity = 8;
+        canopyLight.position.set(cx, RH - 0.03, 2);
+        canopyLight.target.position.set(cx, -0.15, 2.15);
+    } else {
+        canopyLight.intensity = 0;
+        key.color.set(0xfffaf3);
+        key.intensity = 60;
+        key.angle = 0.52;
+        key.penumbra = 1;
+        key.position.set(cx - 2.3, 3.5, 3.6);
+        key.target.position.set(cx, cy * 0.8, 0);
+        key.shadow.camera.near = 1;
+        key.shadow.radius = 7;
+        fill.color.set(0xdde6f2);
+        fill.intensity = 0.32;
+        fill.position.set(cx + 3.6, 1.6, 3);
+    }
+    key.shadow.camera.updateProjectionMatrix();
+    fill.target.position.set(cx, cy, 0);
+    return true;
 }
 
 function updateInfo(spec) {
@@ -1574,6 +1707,7 @@ function updateInfo(spec) {
 }
 
 let door = null;
+let doorKey = "";
 
 let flight = null;
 let dirty = true;
@@ -1587,6 +1721,14 @@ function cameraPose() {
     const L = (s.leveys || 1480) / 1000;
     const H = (s.korkeus || 2310) / 1000;
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    if (isEntrance()) {
+        const RH = entranceHeight(H);
+        const target = new THREE.Vector3(L / 2, 1.75, 0.7);
+        const fitEH = ((RH + 1.8) * 0.5) / tanHalf * 1.15;
+        const fitEW = ((L + 5) * 0.5) / (tanHalf * camera.aspect) * 1.1;
+        const dir = new THREE.Vector3(-0.22, 0.02, 1).normalize();
+        return { target, position: target.clone().addScaledVector(dir, Math.max(fitEH, fitEW)) };
+    }
     const fitH = (H * 0.5) / tanHalf * 1.34;
     const fitW = (L * 0.5) / (tanHalf * camera.aspect) * 1.45;
     const dist = Math.max(fitH, fitW) * (viewMode === "seina" ? 1.25 : 1);
@@ -1632,19 +1774,39 @@ function rebuild() {
     if (dim) return;
     mats.steel.color.set(spec.vari);
     mats.hinge.color.set(spec.vari);
-    if (door) {
-        scene.remove(door);
-        disposeGeometry(door);
+    const keyNow = JSON.stringify({ ...spec, vari: null });
+    let changed = false;
+    if (keyNow !== doorKey) {
+        doorKey = keyNow;
+        if (door) {
+            scene.remove(door);
+            disposeGeometry(door);
+        }
+        door = buildDoor(spec, mats);
+        scene.add(door);
+        changed = true;
     }
-    door = buildDoor(spec, mats);
-    scene.add(door);
-    updateStage(spec);
+    if (updateStage(spec)) changed = true;
     updateInfo(spec);
-    renderer.shadowMap.needsUpdate = true;
+    if (changed) renderer.shadowMap.needsUpdate = true;
     invalidate();
 }
 
-function resize() {
+let rebuildTimer = 0;
+
+function scheduleRebuild() {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(rebuild, 80);
+}
+
+// While the camera moves, frames are drawn without ambient occlusion; the full quality frame is
+// drawn once the view has been still for SETTLE_MS. Resolution stays fixed because reallocating
+// the multisampled targets mid-interaction stalls the GPU.
+const SETTLE_MS = 160;
+let lastMotion = -Infinity;
+let draft = false;
+
+function applySize() {
     const w = host.clientWidth;
     const h = host.clientHeight;
     const ratio = Math.min(Math.max(window.devicePixelRatio, 1.5), 2);
@@ -1652,21 +1814,65 @@ function resize() {
     renderer.setSize(w, h, false);
     composer.setPixelRatio(ratio);
     composer.setSize(w, h);
-    camera.aspect = w / h;
+}
+
+function setDraft(on) {
+    if (on === draft) return;
+    draft = on;
+    gtao.enabled = !on;
+}
+
+function markMotion() {
+    lastMotion = performance.now();
+    invalidate();
+}
+
+function resize() {
+    applySize();
+    camera.aspect = host.clientWidth / host.clientHeight;
     camera.updateProjectionMatrix();
     invalidate();
+}
+
+// Shader programs are compiled in parallel off the main thread; rendering waits until they are ready
+// so the first draw does not block on synchronous compilation.
+let compiling = true;
+let compileRuns = 0;
+const warmGeometry = new THREE.PlaneGeometry(0.001, 0.001);
+
+function prepareScene() {
+    const run = ++compileRuns;
+    compiling = true;
+    kehys.classList.add("lataa");
+    const normals = new THREE.Mesh(warmGeometry, gtao.normalMaterial);
+    const passes = new THREE.Scene();
+    [gtao.gtaoMaterial, gtao.pdMaterial, gtao.blendMaterial].forEach((material) => {
+        passes.add(new THREE.Mesh(warmGeometry, material));
+    });
+    scene.add(normals);
+    renderer.setRenderTarget(composer.readBuffer);
+    const ready = Promise.all([renderer.compileAsync(scene, camera), renderer.compileAsync(passes, camera)]);
+    renderer.setRenderTarget(null);
+    scene.remove(normals);
+    ready.catch(() => {}).then(() => {
+        if (run !== compileRuns) return;
+        compiling = false;
+        kehys.classList.remove("lataa");
+        invalidate();
+    });
 }
 
 function withTextures(fn) {
     if (!texturesPending()) {
         fn();
+        prepareScene();
         return;
     }
     kehys.classList.add("lataa");
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    loadSurfaces(neededSurfaces()).then(() => {
         fn();
-        kehys.classList.remove("lataa");
-    }));
+        prepareScene();
+    });
 }
 
 function setView(mode) {
@@ -1679,14 +1885,20 @@ function setView(mode) {
 }
 
 function setWall(type) {
+    const wasEntrance = isEntrance();
     wallType = type;
-    withTextures(rebuild);
+    withTextures(() => {
+        rebuild();
+        if (wasEntrance !== isEntrance()) frameCamera(true);
+    });
 }
 
 function saveImage() {
     const w = host.clientWidth;
     const h = host.clientHeight;
     const ratio = Math.min(4, Math.max(2, 3200 / w));
+    draft = false;
+    gtao.enabled = true;
     renderer.setPixelRatio(ratio);
     renderer.setSize(w, h, false);
     composer.setPixelRatio(ratio);
@@ -1715,7 +1927,8 @@ document.getElementById("mitat").addEventListener("input", (event) => {
         applySync(event.target.id);
     }
     syncing = false;
-    rebuild();
+    if (event.target.type === "number" || event.target.id === "oviaukko") scheduleRebuild();
+    else rebuild();
 });
 
 $("oviaukko").addEventListener("blur", () => {
@@ -1723,6 +1936,7 @@ $("oviaukko").addEventListener("blur", () => {
     syncing = true;
     applyOpeningInput(true);
     syncing = false;
+    clearTimeout(rebuildTimer);
     rebuild();
 });
 
@@ -1739,26 +1953,35 @@ $("tallenna").addEventListener("click", saveImage);
 controls.addEventListener("start", () => {
     flight = null;
 });
-controls.addEventListener("change", invalidate);
+controls.addEventListener("change", markMotion);
 
 window.addEventListener("resize", resize);
 restore3dIfAny();
 $("seinaValinta").hidden = viewMode !== "seina";
 resize();
-rebuild();
-frameCamera(false);
+withTextures(() => {
+    rebuild();
+    frameCamera(false);
+});
+setTimeout(() => loadSurfaces(["betoni", "rappaus", "lattia", "paneeli"]), 2500);
 
 renderer.setAnimationLoop((now) => {
     if (flight) {
         stepFlight(now);
-        invalidate();
+        markMotion();
     }
     controls.update();
     if (camera.position.y < 0.04) {
         camera.position.y = 0.04;
         invalidate();
     }
-    if (!dirty) return;
+    const moving = now - lastMotion < SETTLE_MS;
+    if (!moving && draft) {
+        setDraft(false);
+        dirty = true;
+    }
+    if (!dirty || compiling) return;
+    if (moving) setDraft(true);
     dirty = false;
     composer.render();
     if (!kehys.classList.contains("valmis")) kehys.classList.add("valmis");
