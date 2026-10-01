@@ -411,8 +411,10 @@ input[type="color"]::-webkit-color-swatch {
 }
 
 .kehys {
-    position: relative;
-    height: max(78vh, 540px);
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    height: calc(100vh - 48px);
     min-height: 540px;
     border-radius: 20px;
     overflow: hidden;
@@ -623,6 +625,8 @@ input[type="color"]::-webkit-color-swatch {
     }
 
     .kehys {
+        position: relative;
+        top: auto;
         height: 70vh;
         min-height: 440px;
     }
