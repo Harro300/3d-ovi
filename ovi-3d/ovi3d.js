@@ -6,6 +6,7 @@ import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import { computeSurface } from "./pinnat.js?v=40";
+import { clearFacade, detailCrop, editFacade, loadFacade, previewCrop, saveFacade } from "./julkisivu.js?v=42";
 
 const KARMI = 40;
 const PUITE = 87.5;
@@ -47,7 +48,9 @@ let typeError = "";
 let openingLock = null;
 let viewMode = "studio";
 let wallType = "betoni";
-const WALL_TYPES = ["betoni", "rappaus", "kerrostalo"];
+const WALL_TYPES = ["betoni", "rappaus", "kerrostalo", "oma"];
+let facade = null;
+let facadeVersion = 0;
 
 function doorType() {
     const picked = document.querySelector('input[name="tyyppi"]:checked');
@@ -409,7 +412,7 @@ function writeHandoff(data) {
     sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(data));
 }
 
-function captureRestore() {
+function captureDoor() {
     return {
         oviaukko: $("oviaukko").value,
         tyyppi: doorType(),
@@ -421,9 +424,16 @@ function captureRestore() {
         korkeus: $("korkeus").value,
         potku: $("potku").value,
         vari: $("vari").value,
-        ral: $("ral").value,
+        ral: $("ral").value
+    };
+}
+
+function captureRestore() {
+    return {
+        ...captureDoor(),
         nakyma: viewMode,
-        seina: wallType
+        seina: wallType,
+        aukko: facade ? facade.active : 0
     };
 }
 
@@ -451,7 +461,7 @@ function specFor2d() {
     };
 }
 
-function siirra() {
+async function siirra() {
     const dim = validate(readSpec());
     const msg = [ralError, dim].filter(Boolean).join(" ");
     $("virhe").hidden = !msg;
@@ -463,14 +473,37 @@ function siirra() {
         restore3d: captureRestore(),
         extras: prev.extras || null
     });
+    if (facade) {
+        saveActiveDoor();
+        await persistFacade();
+    }
     location.href = "../index.html";
 }
 
 function restore3dIfAny() {
     const data = readHandoff();
     const saved = data && data.restore3d;
-    if (!saved) return;
+    if (!saved) return null;
+    applyDoor(saved);
+    viewMode = saved.nakyma === "seina" ? "seina" : "studio";
+    const savedWall = saved.seina === "tiili" ? "kerrostalo" : saved.seina;
+    if (WALL_TYPES.includes(savedWall)) wallType = savedWall;
+    setRadio("nakymatila", viewMode);
+    setRadio("seina", wallType);
+    return saved;
+}
+
+// Fills the form from a saved door; null starts an opening with an empty Oviaukko field.
+function applyDoor(saved) {
     syncing = true;
+    openingError = "";
+    typeError = "";
+    if (!saved) {
+        $("oviaukko").value = "";
+        clearLock();
+        syncing = false;
+        return;
+    }
     $("oviaukko").value = saved.oviaukko || "";
     $("kaynti").value = saved.kaynti ?? "";
     $("lisa").value = saved.lisa ?? "";
@@ -482,11 +515,6 @@ function restore3dIfAny() {
     $("ral").value = saved.ral || "";
     setDoorType(saved.tyyppi === "kayntiovi" ? "kayntiovi" : "pariovi");
     setHand(saved.katisyys === "vasen" ? "vasen" : "oikea");
-    viewMode = saved.nakyma === "seina" ? "seina" : "studio";
-    const savedWall = saved.seina === "tiili" ? "kerrostalo" : saved.seina;
-    if (WALL_TYPES.includes(savedWall)) wallType = savedWall;
-    setRadio("nakymatila", viewMode);
-    setRadio("seina", wallType);
     const parsed = parseOpening($("oviaukko").value);
     if (parsed.state === "ok") {
         openingLock = {
@@ -1418,8 +1446,12 @@ function isEntrance() {
     return viewMode === "seina" && wallType === "kerrostalo";
 }
 
+function isOwnFacade() {
+    return viewMode === "seina" && wallType === "oma" && !!facade;
+}
+
 function neededSurfaces() {
-    if (viewMode !== "seina") return [];
+    if (viewMode !== "seina" || wallType === "oma") return [];
     return wallType === "kerrostalo" ? ["rappaus", "paneeli"] : [wallType, "lattia"];
 }
 
@@ -1618,10 +1650,90 @@ function buildWallSet(spec) {
     return group;
 }
 
+// The marked rectangle is stretched to the opening (door + 10 mm joint at the sides and top), so the
+// drawing's scale is taken from the door entered in the form, not from the drawing.
+const facadeCrops = new Map();
+
+function cropKey(r) {
+    return [facadeVersion, r.id, r.x, r.y, r.w, r.h].join(":");
+}
+
+// A PDF opening is first shown from the preview and replaced once the detailed render is ready.
+function facadeCrop(r) {
+    const key = cropKey(r);
+    if (facadeCrops.has(key)) return facadeCrops.get(key);
+    const quick = previewCrop(facade, r);
+    facadeCrops.set(key, quick);
+    if (facade.kind === "pdf") {
+        kehys.classList.add("lataa");
+        detailCrop(facade, r).then((crop) => {
+            facadeCrops.set(key, crop);
+            if (isOwnFacade() && cropKey(facade.rects[facade.active]) === key) {
+                stageKey = "";
+                rebuild();
+            }
+        }).catch(() => {}).finally(() => {
+            if (!compiling) kehys.classList.remove("lataa");
+        });
+    }
+    return quick;
+}
+
+function buildFacadeSet(spec) {
+    const r = facade.rects[facade.active];
+    const crop = facadeCrop(r);
+    const L = spec.leveys / 1000;
+    const H = spec.korkeus / 1000;
+    const j = 0.01;
+    const T = 0.2;
+    const sx = (L + 2 * j) / r.w;
+    const sy = (H + j) / r.h;
+    const X = (px) => -j + (px - r.x) * sx;
+    const Y = (py) => (r.y + r.h - py) * sy;
+    const x0 = Math.min(X(crop.x0), -j - 0.05);
+    const x1 = Math.max(X(crop.x1), L + j + 0.05);
+    const y0 = Math.min(Y(crop.y1), -0.05);
+    const y1 = Math.max(Y(crop.y0), H + j + 0.05);
+    const tx0 = X(crop.x0);
+    const ty0 = Y(crop.y1);
+    const tw = X(crop.x1) - tx0;
+    const th = Y(crop.y0) - ty0;
+
+    const texture = new THREE.CanvasTexture(crop.canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = maxAniso;
+    texture.repeat.set(1 / tw, 1 / th);
+    texture.offset.set(-tx0 / tw, -ty0 / th);
+    const face = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.95, metalness: 0 });
+    const reveal = new THREE.MeshStandardMaterial({ color: 0xd8d5cf, roughness: 1, metalness: 0 });
+    const back = new THREE.MeshStandardMaterial({ color: 0x141517, roughness: 1, metalness: 0 });
+    const ground = new THREE.MeshStandardMaterial({ color: 0x4a4b4e, roughness: 0.95, metalness: 0 });
+
+    const group = new THREE.Group();
+    const wall = shapeFrom([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+    wall.holes.push(new THREE.Path([V2(-j, 0), V2(L + j, 0), V2(L + j, H + j), V2(-j, H + j)]));
+    group.add(extrudeWorld(wall, 0, T, [face, reveal]));
+    group.add(extrudeWorld(
+        [[-j, 0], [-j, H + j], [L + j, H + j], [L + j, 0], [L, 0], [L, H], [0, H], [0, 0]],
+        -0.004, T - 0.008, sealantMat
+    ));
+    worldPlane(group, L + 1.2, H + 1.2, L / 2, H / 2, -T - 0.6, back);
+    const floor = worldPlane(group, 60, 40, (x0 + x1) / 2, y0 - 0.001, 0, ground);
+    floor.rotation.x = -Math.PI / 2;
+    group.userData.dispose = () => [texture, face, reveal, back, ground].forEach((item) => item.dispose());
+    return group;
+}
+
+function facadeSpec(spec) {
+    if (spec.leveys >= 500 && spec.korkeus >= 800) return spec;
+    return { ...spec, leveys: 1480, korkeus: 2310 };
+}
+
 function disposeGeometry(object) {
     object.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
     });
+    if (object.userData.dispose) object.userData.dispose();
 }
 
 let wallSet = null;
@@ -1630,7 +1742,9 @@ let stageKey = "";
 function updateStage(spec) {
     const cx = spec.leveys / 2000;
     const cy = spec.korkeus / 2000;
-    const keyNow = [viewMode, wallType, spec.leveys, spec.korkeus, spec.pair, spec.vasen].join("|");
+    const own = isOwnFacade();
+    const keyNow = [viewMode, wallType, spec.leveys, spec.korkeus, spec.pair, spec.vasen,
+        own ? facade.active + ":" + facadeVersion : ""].join("|");
     if (keyNow === stageKey) return false;
     stageKey = keyNow;
     studioSet.visible = viewMode === "studio";
@@ -1641,15 +1755,16 @@ function updateStage(spec) {
         wallSet = null;
     }
     if (viewMode === "seina") {
-        wallSet = isEntrance() ? buildEntranceSet(spec) : buildWallSet(spec);
+        wallSet = isEntrance() ? buildEntranceSet(spec) : own ? buildFacadeSet(spec) : buildWallSet(spec);
         scene.add(wallSet);
     }
     const night = isEntrance();
     const bg = night ? NIGHT_BG : BG;
     scene.background.set(bg);
     scene.fog.color.set(bg);
-    scene.fog.near = night ? 14 : 9;
-    scene.fog.far = night ? 40 : 22;
+    scene.fog.near = night ? 14 : own ? 28 : 9;
+    scene.fog.far = night ? 40 : own ? 60 : 22;
+    controls.maxDistance = own ? 30 : 14;
     scene.environmentIntensity = night ? 0.16 : 0.85;
     renderer.toneMappingExposure = night ? 1.25 : 1.1;
     softbox.intensity = night ? 0 : 5;
@@ -1681,7 +1796,7 @@ function updateStage(spec) {
         canopyLight.intensity = 0;
         key.color.set(0xfffaf3);
         key.intensity = 60;
-        key.angle = 0.52;
+        key.angle = own ? 0.95 : 0.52;
         key.penumbra = 1;
         key.position.set(cx - 2.3, 3.5, 3.6);
         key.target.position.set(cx, cy * 0.8, 0);
@@ -1696,14 +1811,86 @@ function updateStage(spec) {
     return true;
 }
 
-function updateInfo(spec) {
+function updateInfo(spec, waiting) {
     const ral = $("ral").value.replace(/\D/g, "");
-    const parts = [
+    const parts = waiting ? ["Syötä oviaukko"] : [
         spec.pair ? "Pariovi" : "Käyntiovi",
         Math.round(spec.leveys) + " × " + Math.round(spec.korkeus) + " mm"
     ];
-    if (RAL[ral]) parts.push("RAL " + ral);
+    if (!waiting && RAL[ral]) parts.push("RAL " + ral);
+    if (isOwnFacade()) parts.unshift("Aukko " + (facade.active + 1));
     $("tieto").textContent = parts.join("  ·  ");
+}
+
+function updateQueue() {
+    const own = isOwnFacade();
+    $("aukkojono").hidden = !own;
+    if (!own) return;
+    const n = facade.rects.length;
+    $("aukkoNro").textContent = "Aukko " + (facade.active + 1) + " / " + n;
+    $("aukkoEdellinen").disabled = facade.active === 0;
+    $("aukkoSeuraava").disabled = facade.active >= n - 1;
+}
+
+function saveActiveDoor() {
+    if (facade) facade.rects[facade.active].door = captureDoor();
+}
+
+function persistFacade() {
+    return facade ? saveFacade(facade).catch(() => {}) : Promise.resolve();
+}
+
+let persistTimer = 0;
+
+function schedulePersist() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+        saveActiveDoor();
+        persistFacade();
+    }, 600);
+}
+
+function goToOpening(index) {
+    if (!facade || index < 0 || index >= facade.rects.length || index === facade.active) return;
+    saveActiveDoor();
+    facade.active = index;
+    applyDoor(facade.rects[index].door);
+    persistFacade();
+    updateQueue();
+    rebuild();
+    frameCamera(true);
+    if (!openingLock) $("oviaukko").focus();
+}
+
+async function editOpenings() {
+    if (facade) saveActiveDoor();
+    const result = await editFacade(facade);
+    if (result && result.removed) {
+        facade = null;
+        facadeVersion++;
+        facadeCrops.clear();
+        clearTimeout(persistTimer);
+        await clearFacade().catch(() => {});
+        if (wallType === "oma") wallType = "betoni";
+        setRadio("seina", wallType);
+        setWall(wallType);
+        return;
+    }
+    if (!result) {
+        setRadio("seina", wallType);
+        return;
+    }
+    const same = facade && result.blob === facade.blob && result.page === facade.page;
+    const activeId = same ? facade.rects[facade.active].id : null;
+    const index = result.rects.findIndex((r) => r.id === activeId);
+    facade = { ...result, active: Math.max(index, 0) };
+    facadeVersion++;
+    facadeCrops.clear();
+    applyDoor(facade.rects[facade.active].door);
+    persistFacade();
+    setRadio("seina", "oma");
+    setWall("oma");
+    if (!openingLock) $("oviaukko").focus();
 }
 
 let door = null;
@@ -1721,6 +1908,13 @@ function cameraPose() {
     const L = (s.leveys || 1480) / 1000;
     const H = (s.korkeus || 2310) / 1000;
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    if (isOwnFacade()) {
+        const fitOH = (H * 0.5) / tanHalf * 2.1;
+        const fitOW = (L * 0.5) / (tanHalf * camera.aspect) * 3;
+        const target = new THREE.Vector3(L / 2, H * 0.55, 0);
+        const dir = new THREE.Vector3(-0.18, 0.03, 1).normalize();
+        return { target, position: target.clone().addScaledVector(dir, Math.max(fitOH, fitOW)) };
+    }
     if (isEntrance()) {
         const RH = entranceHeight(H);
         const target = new THREE.Vector3(L / 2, 1.75, 0.7);
@@ -1767,16 +1961,18 @@ function stepFlight(now) {
 
 function rebuild() {
     const spec = readSpec();
-    const dim = validate(spec);
+    const waiting = isOwnFacade() && !openingLock;
+    const dim = waiting ? "" : validate(spec);
     const msg = [ralError, dim].filter(Boolean).join(" ");
     $("virhe").hidden = !msg;
     $("virhe").textContent = msg;
+    updateQueue();
     if (dim) return;
     mats.steel.color.set(spec.vari);
     mats.hinge.color.set(spec.vari);
     const keyNow = JSON.stringify({ ...spec, vari: null });
     let changed = false;
-    if (keyNow !== doorKey) {
+    if (!waiting && keyNow !== doorKey) {
         doorKey = keyNow;
         if (door) {
             scene.remove(door);
@@ -1786,8 +1982,13 @@ function rebuild() {
         scene.add(door);
         changed = true;
     }
-    if (updateStage(spec)) changed = true;
-    updateInfo(spec);
+    if (door && door.visible === waiting) {
+        door.visible = !waiting;
+        changed = true;
+    }
+    if (updateStage(waiting ? facadeSpec(spec) : spec)) changed = true;
+    updateInfo(spec, waiting);
+    if (isOwnFacade()) schedulePersist();
     if (changed) renderer.shadowMap.needsUpdate = true;
     invalidate();
 }
@@ -1884,13 +2085,25 @@ function setView(mode) {
     });
 }
 
+function framing() {
+    return isOwnFacade() ? "oma:" + facade.active + ":" + facadeVersion : isEntrance() ? "kerrostalo" : "seina";
+}
+
 function setWall(type) {
-    const wasEntrance = isEntrance();
+    const before = framing();
     wallType = type;
     withTextures(() => {
         rebuild();
-        if (wasEntrance !== isEntrance()) frameCamera(true);
+        if (before !== framing()) frameCamera(true);
     });
+}
+
+function pickWall(type) {
+    if (type === "oma" && !facade) {
+        editOpenings();
+        return;
+    }
+    setWall(type);
 }
 
 function saveImage() {
@@ -1909,7 +2122,8 @@ function saveImage() {
     const s = readSpec();
     const ral = $("ral").value.replace(/\D/g, "");
     const link = document.createElement("a");
-    link.download = "janisol-" + Math.round(s.leveys) + "x" + Math.round(s.korkeus) + (RAL[ral] ? "-ral" + ral : "") + ".png";
+    link.download = "janisol-" + Math.round(s.leveys) + "x" + Math.round(s.korkeus) + (RAL[ral] ? "-ral" + ral : "")
+        + (isOwnFacade() ? "-aukko" + (facade.active + 1) : "") + ".png";
     link.href = url;
     link.click();
 }
@@ -1946,8 +2160,11 @@ document.querySelectorAll('input[name="nakymatila"]').forEach((input) => {
     input.addEventListener("change", () => setView(input.value));
 });
 document.querySelectorAll('input[name="seina"]').forEach((input) => {
-    input.addEventListener("change", () => setWall(input.value));
+    input.addEventListener("change", () => pickWall(input.value));
 });
+$("aukkoEdellinen").addEventListener("click", () => goToOpening(facade.active - 1));
+$("aukkoSeuraava").addEventListener("click", () => goToOpening(facade.active + 1));
+$("aukkoMuokkaa").addEventListener("click", editOpenings);
 $("palauta").addEventListener("click", () => frameCamera(true));
 $("tallenna").addEventListener("click", saveImage);
 controls.addEventListener("start", () => {
@@ -1956,7 +2173,15 @@ controls.addEventListener("start", () => {
 controls.addEventListener("change", markMotion);
 
 window.addEventListener("resize", resize);
-restore3dIfAny();
+const restored = restore3dIfAny();
+facade = await loadFacade().catch(() => null);
+if (facade && restored && Number.isInteger(restored.aukko)) {
+    facade.active = Math.min(Math.max(restored.aukko, 0), facade.rects.length - 1);
+}
+if (wallType === "oma" && !facade) {
+    wallType = "betoni";
+    setRadio("seina", wallType);
+}
 $("seinaValinta").hidden = viewMode !== "seina";
 resize();
 withTextures(() => {

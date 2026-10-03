@@ -604,6 +604,194 @@ input[type="color"]::-webkit-color-swatch {
     animation: pyori 0.8s linear infinite;
 }
 
+.aukkojono {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(14, 15, 18, 0.84);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.kehys:has(.aukkojono:not([hidden])) .tyokalut {
+    left: 380px;
+}
+
+.aukkojono .ikoni {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.aukkojono .ikoni:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+#aukkoNro {
+    min-width: 92px;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #f3e9d6;
+    white-space: nowrap;
+}
+
+.jono-nappi {
+    display: inline-flex;
+    align-items: center;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--teksti-2);
+    padding: 7px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.04);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.jono-nappi:hover {
+    color: var(--teksti);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.jono-nappi:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.jono-nappi.ensisijainen {
+    color: #16171a;
+    font-weight: 600;
+    border-color: transparent;
+    background: linear-gradient(180deg, #f1ebdf 0%, #ddd3c0 100%);
+}
+
+.jono-nappi.ensisijainen:hover:not(:disabled) {
+    filter: brightness(1.05);
+}
+
+.jono-nappi:focus-visible {
+    outline: 2px solid rgba(210, 191, 152, 0.5);
+    outline-offset: 1px;
+}
+
+.julkisivu {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    padding: 24px;
+    background: rgba(5, 6, 8, 0.72);
+    backdrop-filter: blur(6px);
+}
+
+.julkisivu-paneeli {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #101114;
+    border: 1px solid var(--viiva-vahva);
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
+}
+
+.julkisivu-yla {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px 24px;
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--viiva);
+}
+
+.julkisivu-teksti {
+    min-width: 0;
+    max-width: 46rem;
+}
+
+.julkisivu-teksti .kicker {
+    margin-bottom: 6px;
+}
+
+.julkisivu-teksti h2 {
+    margin: 0 0 6px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #f5f3ef;
+}
+
+.julkisivu-teksti .vihje {
+    margin: 0;
+}
+
+.julkisivu-napit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+#julkisivuSivu {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--teksti);
+    padding: 7px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    background: #17181b;
+}
+
+.julkisivu-alue {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    touch-action: none;
+}
+
+#julkisivuPiirto {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.julkisivu-tyhja {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 24px;
+    border: 1px dashed rgba(210, 191, 152, 0.3);
+    border-radius: 16px;
+}
+
+.julkisivu-tyhja .jono-nappi {
+    padding: 11px 18px;
+    font-size: 0.9rem;
+}
+
 @keyframes pyori {
     to {
         transform: rotate(360deg);

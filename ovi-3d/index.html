@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jansen Janisol</title>
-    <link rel="stylesheet" href="ovi3d.css?v=41">
+    <link rel="stylesheet" href="ovi3d.css?v=43">
 </head>
 <body>
     <div class="tausta" aria-hidden="true"></div>
@@ -82,6 +82,7 @@
                         <label><input type="radio" name="seina" value="betoni" checked><span>Betoni</span></label>
                         <label><input type="radio" name="seina" value="rappaus"><span>Rappaus</span></label>
                         <label><input type="radio" name="seina" value="kerrostalo"><span>Kerrostalo</span></label>
+                        <label><input type="radio" name="seina" value="oma"><span>Oma julkisivu</span></label>
                     </div>
                     <button type="button" class="ikoni" id="palauta" title="Palauta kuvakulma" aria-label="Palauta kuvakulma">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>
@@ -90,20 +91,59 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg>
                     </button>
                 </div>
+                <div class="aukkojono" id="aukkojono" hidden>
+                    <button type="button" class="ikoni" id="aukkoEdellinen" title="Edellinen aukko" aria-label="Edellinen aukko">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6"/></svg>
+                    </button>
+                    <span id="aukkoNro"></span>
+                    <button type="button" class="ikoni" id="aukkoSeuraava" title="Seuraava aukko" aria-label="Seuraava aukko">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>
+                    </button>
+                    <button type="button" class="jono-nappi" id="aukkoMuokkaa">Muokkaa merkintöjä</button>
+                </div>
                 <div class="tieto" id="tieto"></div>
                 <div class="ohje">Vedä: pyöritä · Rulla: zoomaa · Oikea painike: siirrä</div>
                 <div class="lataus"><span class="pyora"></span>Valmistellaan materiaaleja</div>
             </div>
         </div>
     </main>
+    <div class="julkisivu" id="julkisivu" hidden>
+        <div class="julkisivu-paneeli" role="dialog" aria-modal="true" aria-labelledby="julkisivuOtsikko">
+            <div class="julkisivu-yla">
+                <div class="julkisivu-teksti">
+                    <span class="kicker">Oma julkisivu</span>
+                    <h2 id="julkisivuOtsikko">Merkitse oviaukot</h2>
+                    <p class="vihje" id="julkisivuOhje"></p>
+                </div>
+                <div class="julkisivu-napit">
+                    <select id="julkisivuSivu" aria-label="PDF-sivu" hidden></select>
+                    <label class="jono-nappi" id="julkisivuVaihda" for="julkisivuTiedosto">Vaihda piirustus</label>
+                    <button type="button" class="jono-nappi" id="julkisivuPoistaPiirustus" hidden>Poista piirustus</button>
+                    <button type="button" class="jono-nappi" id="julkisivuPoista" disabled>Poista valittu</button>
+                    <button type="button" class="jono-nappi" id="julkisivuPeruuta">Peruuta</button>
+                    <button type="button" class="jono-nappi ensisijainen" id="julkisivuValmis" disabled>Valmis</button>
+                </div>
+            </div>
+            <div class="julkisivu-alue" id="julkisivuAlue">
+                <canvas id="julkisivuPiirto"></canvas>
+                <div class="julkisivu-tyhja" id="julkisivuTyhja">
+                    <label class="jono-nappi ensisijainen" for="julkisivuTiedosto">Valitse PDF tai kuva</label>
+                    <span class="vihje">PDF, PNG tai JPG. Tiedoston voi myös pudottaa tähän.</span>
+                </div>
+                <div class="lataus julkisivu-lataus" id="julkisivuLataus" hidden><span class="pyora"></span>Avataan piirustusta</div>
+            </div>
+            <input id="julkisivuTiedosto" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" hidden>
+        </div>
+    </div>
     <script type="importmap">
     {
         "imports": {
             "three": "./vendor/three/build/three.module.min.js",
-            "three/addons/": "./vendor/three/examples/jsm/"
+            "three/addons/": "./vendor/three/examples/jsm/",
+            "pdfjs": "./vendor/pdfjs/pdf.min.js"
         }
     }
     </script>
-    <script type="module" src="ovi3d.js?v=40"></script>
+    <script type="module" src="ovi3d.js?v=42"></script>
 </body>
 </html>
