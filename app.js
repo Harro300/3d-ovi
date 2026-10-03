@@ -1,7 +1,6 @@
 (function () {
     'use strict';
 
-    var EXAMPLE_URL = 'fixtures/tlo-1214.json';
     var HANDOFF_KEY = 'ovi-siirto';
     var lastSpec = null;
     var lastLayout = null;
@@ -243,21 +242,6 @@
         }
     }
 
-    async function loadExample() {
-        var res = await fetch(EXAMPLE_URL);
-        if (!res.ok) throw new Error('Esimerkkiä ei voitu ladata.');
-        var data = await res.json();
-        writeForm(data);
-        render();
-        var layout = DoorLayout.compute(DoorSpec.normalize(data));
-        var asserts = DoorLayout.assertTlo1214(layout);
-        if (asserts.length) {
-            setStatus('Esimerkki ladattu, assertit: ' + asserts.join('; '), 'is-err');
-        } else {
-            setStatus('TLO 1214 · assertit ok', 'is-ok');
-        }
-    }
-
     function readHandoff() {
         try {
             var raw = sessionStorage.getItem(HANDOFF_KEY);
@@ -361,12 +345,6 @@
         });
         $('back3dBtn').addEventListener('click', returnTo3d);
         $('clearBtn').addEventListener('click', clearForm);
-        $('exampleBtn').addEventListener('click', function () {
-            clearExtras();
-            loadExample().catch(function (err) {
-                showError(err.message || String(err));
-            });
-        });
         $('downloadBtn').addEventListener('click', downloadSvg);
         $('downloadBtn2').addEventListener('click', downloadSvg);
         $('copyJsonBtn').addEventListener('click', function () {
@@ -376,10 +354,7 @@
 
     bind();
     if (!applyHandoff()) {
-        loadExample().catch(function (err) {
-            writeForm(DoorSpec.empty());
-            render();
-            showError(err.message || String(err));
-        });
+        writeForm(DoorSpec.empty());
+        render();
     }
 })();

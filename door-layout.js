@@ -177,29 +177,7 @@
         };
     }
 
-    function assertTlo1214(layout) {
-        var errors = [];
-        function eq(name, got, want) {
-            if (got !== want) errors.push(name + ': ' + got + ' ≠ ' + want);
-        }
-        if (!layout) {
-            return ['layout puuttuu'];
-        }
-        eq('frame.w', layout.frame.w, 1480);
-        eq('frame.h', layout.frame.h, 2310);
-        eq('kick.h', layout.dims.kickH, 265);
-        eq('lock.y', layout.lock.y, 1000);
-        eq('leaves', layout.leaves.length, 1);
-        eq('glass.w', layout.dims.glassW, 1215);
-        eq('glass.h', layout.dims.glassH, 1910);
-        if (layout.lock.side !== 'vasen') {
-            errors.push('TLO-esimerkki: saranat oikealla, lukko vasemmalla (ulkoa)');
-        }
-        return errors;
-    }
-
     root.DoorLayout = {
-        compute: compute,
-        assertTlo1214: assertTlo1214
+        compute: compute
     };
 })(typeof window !== 'undefined' ? window : this);
