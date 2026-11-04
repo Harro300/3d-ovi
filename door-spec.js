@@ -10,7 +10,9 @@
         W_PARI: 420,
         H: 240,
         H_POTKU: 135,
-        KICK_MIN: 40
+        KICK_MIN: 40,
+        RUUTU_PUITE: 70,
+        RUUTU_MAX: 4
     };
 
     var FACE = {
@@ -37,6 +39,8 @@
         valoaukko_w: 0,
         valoaukko_h: 0,
         lisaovi_valoaukko_w: 0,
+        ruutuja: 1,
+        ruutukorkeudet: [],
         lasi: { paksuus: 18, enabled: true },
         vari: '',
         kynnys: '',
@@ -108,6 +112,40 @@
         return Math.max(0, Math.round((W - VALO.W_PARI) / 2));
     }
 
+    function normalizeRuutuja(v) {
+        var n = Math.round(num(v, 1));
+        if (!(n >= 1)) return 1;
+        return Math.min(VALO.RUUTU_MAX, n);
+    }
+
+    function paneHeights(valo_h, ruutuja) {
+        var n = normalizeRuutuja(ruutuja);
+        var total = num(valo_h, 0) - (n - 1) * VALO.RUUTU_PUITE;
+        var each = Math.floor(total / n);
+        var out = [];
+        for (var i = 0; i < n; i++) out.push(i === n - 1 ? total - each * (n - 1) : each);
+        return out;
+    }
+
+    function panesTotal(panes) {
+        return panes.reduce(function (a, b) { return a + b; }, 0) +
+            Math.max(0, panes.length - 1) * VALO.RUUTU_PUITE;
+    }
+
+    function fillPanes(out, raw) {
+        if (out.ruutuja < 2) {
+            out.ruutukorkeudet = [out.valoaukko_h];
+            return;
+        }
+        var list = Array.isArray(raw) ? raw.map(function (v) { return num(v, NaN); }) : [];
+        if (list.length === out.ruutuja && list.every(function (v) { return v > 0; })) {
+            out.ruutukorkeudet = list;
+            out.valoaukko_h = panesTotal(list);
+        } else {
+            out.ruutukorkeudet = paneHeights(out.valoaukko_h, out.ruutuja);
+        }
+    }
+
     function openingWidth(s) {
         return s.leveys - 2 * s.karmi - 2 * s.rako;
     }
@@ -152,6 +190,7 @@
             valoaukko_w: num(s.valoaukko_w, 0),
             valoaukko_h: num(s.valoaukko_h, 0),
             lisaovi_valoaukko_w: Math.max(0, num(s.lisaovi_valoaukko_w, 0)),
+            ruutuja: normalizeRuutuja(s.ruutuja),
             lasi: normalizeLasi(s.lasi, true),
             vari: str(s.vari),
             kynnys: str(s.kynnys),
@@ -171,6 +210,7 @@
         if (out.syvyys <= 0) out.syvyys = DEFAULTS.syvyys;
         if (out.rako < 0) out.rako = DEFAULTS.rako;
         fillValoaukko(out);
+        fillPanes(out, s.ruutukorkeudet);
         return out;
     }
 
@@ -219,6 +259,9 @@
         if (s.valoaukko_h < 80) {
             errors.push('Valoaukon korkeus on liian pieni.');
         }
+        if (s.lasi.enabled && s.ruutuja > 1 && s.ruutukorkeudet.some(function (h) { return h < 80; })) {
+            errors.push('Ruudun korkeus on vähintään 80 mm.');
+        }
         if (pair && s.lisaovi_valoaukko_w < 80) {
             errors.push('Lisäoven valoaukko on liian pieni.');
         }
@@ -258,6 +301,8 @@
         hasKick: hasKick,
         valoaukkoH: valoaukkoH,
         korkeusFromValoH: korkeusFromValoH,
+        paneHeights: paneHeights,
+        panesTotal: panesTotal,
         hasPanic: hasPanic
     };
 })(typeof window !== 'undefined' ? window : this);

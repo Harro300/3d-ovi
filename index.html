@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Ovipiirrin: käyntioven naamakuva ja speksipalsta SVG:nä.">
     <title>Ovipiirrin</title>
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
     <a href="#drawerScreen" class="skip-link">Siirry sisältöön</a>
@@ -16,7 +16,7 @@
             <div>
                 <span class="kicker">Teräsovi · 2D-piirustus</span>
                 <h1>Ovipiirrin</h1>
-                <p>Naamakuva ja speksipalsta A3-arkille. Muutokset päivittyvät esikatseluun heti.</p>
+                <p>Naamakuva ja speksipalsta A4-arkille. Muutokset päivittyvät esikatseluun heti.</p>
             </div>
             <div class="otsake-merkit">
                 <span class="merkki">Janisol 2</span>
@@ -29,6 +29,25 @@
             <form class="paneeli" id="syotteet" autocomplete="off" onsubmit="return false;">
                 <section class="osio">
                     <h2><span>01</span>Ovi</h2>
+                    <div class="tyyppi-kentta lisavalinnat" data-valikko>
+                        <span class="tyyppi-otsikko" id="lisavalinnatOtsikko">Lisävalinnat</span>
+                        <button type="button" class="valinta-nappi" aria-haspopup="true" aria-expanded="false" aria-controls="lisavalinnatValikko" aria-labelledby="lisavalinnatOtsikko lisavalinnatArvo">
+                            <span id="lisavalinnatArvo" data-valikko-arvo>1 ruutu</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+                        </button>
+                        <div class="valinta-valikko" id="lisavalinnatValikko" role="radiogroup" aria-label="Ruutuja per ovilehti" data-select="ruutujaInput" hidden>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutujaSeg" value="1"><span>1 ruutu</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutujaSeg" value="2"><span>2 ruutua</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutujaSeg" value="3"><span>3 ruutua</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutujaSeg" value="4"><span>4 ruutua</span></label>
+                        </div>
+                        <select class="piilo" id="ruutujaInput" tabindex="-1" aria-hidden="true">
+                            <option value="1">1 ruutu</option>
+                            <option value="2">2 ruutua</option>
+                            <option value="3">3 ruutua</option>
+                            <option value="4">4 ruutua</option>
+                        </select>
+                    </div>
                     <div class="tyyppi-kentta">
                         <span class="tyyppi-otsikko" id="ovityyppiOtsikko">Ovityyppi</span>
                         <div class="tyyppi-valinta" role="radiogroup" aria-labelledby="ovityyppiOtsikko" data-select="ovityyppiInput">
@@ -80,7 +99,11 @@
                         <label class="kentta">Oven leveys<span class="mm"><input id="leveysInput" type="number" min="500" max="3000" step="1"></span></label>
                         <label class="kentta">Oven korkeus<span class="mm"><input id="korkeusInput" type="number" min="800" max="3000" step="1"></span></label>
                         <label class="kentta">Valoaukon leveys<span class="mm"><input id="valoLeveysInput" type="number" min="80" max="2500" step="1"></span></label>
-                        <label class="kentta">Valoaukon korkeus<span class="mm"><input id="valoKorkeusInput" type="number" min="80" max="2800" step="1"></span></label>
+                        <label class="kentta" id="valoKorkeusLabel">Valoaukon korkeus<span class="mm"><input id="valoKorkeusInput" type="number" min="80" max="2800" step="1"></span></label>
+                        <label class="kentta" id="ruutu1Label" hidden><span id="ruutu1Nimi">Ylempi ruutu</span><span class="mm"><input id="ruutu1Input" type="number" min="80" step="1"></span></label>
+                        <label class="kentta" id="ruutu2Label" hidden><span id="ruutu2Nimi">Alempi ruutu</span><span class="mm"><input id="ruutu2Input" type="number" min="80" step="1"></span></label>
+                        <label class="kentta" id="ruutu3Label" hidden><span id="ruutu3Nimi">3. ruutu</span><span class="mm"><input id="ruutu3Input" type="number" min="80" step="1"></span></label>
+                        <label class="kentta" id="ruutu4Label" hidden><span id="ruutu4Nimi">Alin ruutu</span><span class="mm"><input id="ruutu4Input" type="number" min="80" step="1"></span></label>
                         <div class="kentta-laatikko levea" id="lisaValoCol" style="display:none;">
                             <label class="kentta">Lisäoven valoaukko<span class="mm"><input id="lisaValoInput" type="number" min="80" max="2000" step="1"></span></label>
                         </div>
@@ -141,7 +164,7 @@
                         <span class="tieto">Esikatselu</span>
                         <span id="previewStatus" class="preview-status"></span>
                     </div>
-                    <span class="kehys-vihje">A3 vaaka · 1:10 · Janisol 2 · Logikal-viivat</span>
+                    <span class="kehys-vihje" id="arkkiVihje">A4 vaaka · 1:15 · Janisol 2 · Logikal-viivat</span>
                 </div>
                 <div id="previewHost" class="preview-host" aria-label="Oven naamakuva"></div>
                 <div class="kehys-palkki kehys-ala">
@@ -161,11 +184,11 @@
         </div>
     </main>
 
-    <script src="ui.js?v=1"></script>
-    <script src="door-spec.js?v=26"></script>
-    <script src="door-layout.js?v=26"></script>
-    <script src="door-draw.js?v=27"></script>
-    <script src="sheet-draw.js?v=26"></script>
-    <script src="app.js?v=26"></script>
+    <script src="ui.js?v=2"></script>
+    <script src="door-spec.js?v=28"></script>
+    <script src="door-layout.js?v=28"></script>
+    <script src="door-draw.js?v=30"></script>
+    <script src="sheet-draw.js?v=29"></script>
+    <script src="app.js?v=29"></script>
 </body>
 </html>

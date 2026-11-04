@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jansen Janisol</title>
-    <link rel="stylesheet" href="ovi3d.css?v=43">
+    <link rel="stylesheet" href="ovi3d.css?v=44">
 </head>
 <body>
     <div class="tausta" aria-hidden="true"></div>
@@ -22,6 +22,19 @@
                         <input id="oviaukko" type="text" placeholder="15x23" spellcheck="false" autocapitalize="off">
                         <span class="vihje">15x23 on aukko 1500×2300 mm. Oven mitta on 20 mm pienempi molemmissa suunnissa. Kirjain o tai v korkeuden perään valitsee kätisyyden.</span>
                     </label>
+                    <div class="tyyppi-kentta lisavalinnat" id="lisavalinnat">
+                        <span class="tyyppi-otsikko" id="lisavalinnatOtsikko">Lisävalinnat</span>
+                        <button type="button" class="valinta-nappi" id="lisavalinnatNappi" aria-haspopup="true" aria-expanded="false" aria-controls="lisavalinnatValikko" aria-labelledby="lisavalinnatOtsikko lisavalinnatArvo">
+                            <span id="lisavalinnatArvo">1 ruutu</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+                        </button>
+                        <div class="valinta-valikko" id="lisavalinnatValikko" role="radiogroup" aria-label="Ruutuja per ovilehti" hidden>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutuja" value="1" checked><span>1 ruutu</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutuja" value="2"><span>2 ruutua</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutuja" value="3"><span>3 ruutua</span></label>
+                            <label class="tyyppi-nappi"><input type="radio" name="ruutuja" value="4"><span>4 ruutua</span></label>
+                        </div>
+                    </div>
                     <div class="tyyppi-kentta">
                         <span class="tyyppi-otsikko">Ovi</span>
                         <div class="tyyppi-valinta" role="radiogroup" aria-label="Ovi">
@@ -56,7 +69,11 @@
                         <label id="lisaLabel">Lisäoven valoaukko<span class="mm"><input id="lisa" type="number" min="80" step="1" value="265"></span></label>
                         <label>Oven leveys<span class="mm"><input id="leveys" type="number" min="1000" step="1" value="1480"></span></label>
                         <label>Oven korkeus<span class="mm"><input id="korkeus" type="number" min="800" step="1" value="2310"></span></label>
-                        <label>Valoaukon korkeus<span class="mm"><input id="valoH" type="number" min="80" step="1" value="1875"></span></label>
+                        <label id="valoHLabel">Valoaukon korkeus<span class="mm"><input id="valoH" type="number" min="80" step="1" value="1875"></span></label>
+                        <label id="ruutu1Label" hidden><span id="ruutu1Nimi">Ylempi ruutu</span><span class="mm"><input id="ruutu1" type="number" min="80" step="1"></span></label>
+                        <label id="ruutu2Label" hidden><span id="ruutu2Nimi">Alempi ruutu</span><span class="mm"><input id="ruutu2" type="number" min="80" step="1"></span></label>
+                        <label id="ruutu3Label" hidden><span id="ruutu3Nimi">3. ruutu</span><span class="mm"><input id="ruutu3" type="number" min="80" step="1"></span></label>
+                        <label id="ruutu4Label" hidden><span id="ruutu4Nimi">Alin ruutu</span><span class="mm"><input id="ruutu4" type="number" min="80" step="1"></span></label>
                         <label>Potkupellin korkeus<span class="mm"><input id="potku" type="number" min="40" step="1" value="300"></span></label>
                     </div>
                 </section>
@@ -144,6 +161,6 @@
         }
     }
     </script>
-    <script type="module" src="ovi3d.js?v=42"></script>
+    <script type="module" src="ovi3d.js?v=44"></script>
 </body>
 </html>

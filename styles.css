@@ -355,6 +355,78 @@ input[type="number"]::-webkit-inner-spin-button {
     pointer-events: none;
 }
 
+.lisavalinnat {
+    position: relative;
+}
+
+.valinta-nappi {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font: inherit;
+    font-size: 0.93rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--teksti);
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid rgba(22, 24, 28, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: inset 0 1px 2px rgba(22, 24, 28, 0.03);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.valinta-nappi:hover {
+    border-color: rgba(22, 24, 28, 0.22);
+    background: #fff;
+}
+
+.valinta-nappi:focus-visible,
+.valinta-nappi[aria-expanded="true"] {
+    outline: none;
+    border-color: var(--aksentti-reuna);
+    box-shadow: 0 0 0 3px rgba(154, 125, 76, 0.14);
+    background: #fff;
+}
+
+.valinta-nappi svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: var(--teksti-3);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.15s ease;
+}
+
+.valinta-nappi[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+}
+
+.valinta-valikko {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: grid;
+    gap: 3px;
+    margin-top: 6px;
+    padding: 3px;
+    border: 1px solid rgba(22, 24, 28, 0.1);
+    border-radius: 11px;
+    background: #faf9f6;
+    box-shadow: 0 14px 34px rgba(23, 24, 27, 0.14);
+}
+
+.valinta-valikko .tyyppi-nappi span {
+    text-align: left;
+}
+
 .vihje {
     font-size: 0.74rem;
     font-weight: 400;
@@ -739,9 +811,9 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .preview-host svg {
     display: block;
-    width: min(100cqw, 100cqh * 420 / 297);
+    width: min(100cqw, 100cqh * 297 / 210);
     height: auto;
-    aspect-ratio: 420 / 297;
+    aspect-ratio: 297 / 210;
     background: #fff;
     border-radius: 2px;
     box-shadow:

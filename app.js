@@ -14,8 +14,62 @@
         valoKorkeusInput: true,
         lisaValoInput: true,
         potkulevyInput: true,
-        ovityyppiInput: true
+        ovityyppiInput: true,
+        ruutujaInput: true,
+        ruutu1Input: true,
+        ruutu2Input: true,
+        ruutu3Input: true,
+        ruutu4Input: true
     };
+
+    var PANE_NAMES = {
+        2: ['Ylempi ruutu', 'Alempi ruutu'],
+        3: ['Ylin ruutu', 'Keskiruutu', 'Alin ruutu'],
+        4: ['Ylin ruutu', '2. ruutu', '3. ruutu', 'Alin ruutu']
+    };
+
+    function paneCount() {
+        var n = Math.round(Number(val('ruutujaInput')));
+        return n >= 1 ? Math.min(DoorSpec.VALO.RUUTU_MAX, n) : 1;
+    }
+
+    function readPanes() {
+        var out = [];
+        for (var i = 1; i <= paneCount(); i++) out.push(parseNum('ruutu' + i + 'Input'));
+        return out;
+    }
+
+    function splitPanes() {
+        var vh = parseNum('valoKorkeusInput');
+        if (vh == null || paneCount() < 2) return;
+        DoorSpec.paneHeights(vh, paneCount()).forEach(function (h, i) {
+            setIfFinite('ruutu' + (i + 1) + 'Input', h);
+        });
+    }
+
+    // Oven korkeuden tai potkun muutos menee alimpaan ruutuun.
+    function fitBottomPane() {
+        var n = paneCount();
+        if (n < 2) return;
+        var vh = parseNum('valoKorkeusInput');
+        if (vh == null) return;
+        var upper = readPanes().slice(0, -1);
+        if (upper.some(function (h) { return h == null; })) {
+            splitPanes();
+            return;
+        }
+        var used = upper.reduce(function (a, b) { return a + b; }, 0);
+        setIfFinite('ruutu' + n + 'Input', vh - used - (n - 1) * DoorSpec.VALO.RUUTU_PUITE);
+    }
+
+    function syncPaneUi() {
+        var n = paneCount();
+        $('valoKorkeusLabel').hidden = n > 1;
+        for (var i = 1; i <= DoorSpec.VALO.RUUTU_MAX; i++) {
+            $('ruutu' + i + 'Label').hidden = n < 2 || i > n;
+            if (n > 1 && i <= n) $('ruutu' + i + 'Nimi').textContent = PANE_NAMES[n][i - 1];
+        }
+    }
 
     function $(id) {
         return document.getElementById(id);
@@ -74,6 +128,8 @@
             valoaukko_w: val('valoLeveysInput'),
             valoaukko_h: val('valoKorkeusInput'),
             lisaovi_valoaukko_w: val('lisaValoInput'),
+            ruutuja: val('ruutujaInput'),
+            ruutukorkeudet: paneCount() > 1 ? readPanes() : [],
             potkulevy_h: val('potkulevyInput'),
             lukko_h: val('lukkoInput'),
             lasi: {
@@ -101,6 +157,11 @@
         setVal('valoLeveysInput', s.valoaukko_w);
         setVal('valoKorkeusInput', s.valoaukko_h);
         setVal('lisaValoInput', s.lisaovi_valoaukko_w || '');
+        setVal('ruutujaInput', String(s.ruutuja));
+        for (var i = 1; i <= DoorSpec.VALO.RUUTU_MAX; i++) {
+            setVal('ruutu' + i + 'Input', s.ruutuja > 1 && i <= s.ruutuja ? s.ruutukorkeudet[i - 1] : '');
+        }
+        syncPaneUi();
         setVal('potkulevyInput', s.potkulevy_h);
         setVal('lukkoInput', s.lukko_h);
         if ($('lasiInput')) $('lasiInput').checked = !!s.lasi.enabled;
@@ -126,6 +187,25 @@
     }
 
     function applySync(sourceId) {
+        if (sourceId === 'ruutujaInput') {
+            splitPanes();
+            syncPaneUi();
+            return;
+        }
+        if (/^ruutu\dInput$/.test(sourceId)) {
+            var panes = readPanes();
+            if (panes.some(function (h) { return h == null; })) return;
+            var total = panes.reduce(function (a, b) { return a + b; }, 0) +
+                (panes.length - 1) * DoorSpec.VALO.RUUTU_PUITE;
+            setIfFinite('valoKorkeusInput', total);
+            applyDimSync('valoKorkeusInput');
+            return;
+        }
+        applyDimSync(sourceId);
+        fitBottomPane();
+    }
+
+    function applyDimSync(sourceId) {
         var pair = val('ovityyppiInput') === 'pariovi';
         var kick = parseNum('potkulevyInput');
         if (kick == null) kick = 0;
@@ -210,6 +290,8 @@
         var layout = DoorLayout.compute(spec);
         lastLayout = layout;
         lastSvg = DoorSheet.svg(layout);
+        $('arkkiVihje').textContent = 'A4 vaaka · 1:' + DoorSheet.scaleDenom(layout) +
+            ' · Janisol 2 · Logikal-viivat';
         $('previewHost').innerHTML = lastSvg;
         setStatus(spec.tyyppi || (spec.ovityyppi === 'pariovi' ? 'Pariovi' : 'Käyntiovi'), 'is-ok');
     }
@@ -271,6 +353,18 @@
             tyo: form.tyo,
             tyonumero: form.tyonumero
         };
+        data.spec.ruutuja = form.ruutuja;
+        data.spec.ruutukorkeudet = form.ruutukorkeudet;
+        data.spec.valoaukko_h = form.valoaukko_h;
+        data.spec.korkeus = form.korkeus;
+        data.spec.potkulevy_h = form.potkulevy_h;
+        if (data.restore3d) {
+            data.restore3d.ruutuja = form.ruutuja;
+            var panes = form.ruutukorkeudet.map(Number);
+            var fits = panes.length > 1 &&
+                Math.abs(DoorSpec.panesTotal(panes) - Number(data.restore3d.valoH)) < 1;
+            data.restore3d.ruutukorkeudet = fits ? panes : [];
+        }
         writeHandoff(data);
     }
 
@@ -322,6 +416,7 @@
         var ids = [
             'tyyppiInput', 'ovityyppiInput', 'saranapuoliInput', 'katseluInput',
             'leveysInput', 'korkeusInput', 'valoLeveysInput', 'valoKorkeusInput', 'lisaValoInput',
+            'ruutujaInput', 'ruutu1Input', 'ruutu2Input', 'ruutu3Input', 'ruutu4Input',
             'potkulevyInput', 'lukkoInput',
             'lasiInput', 'lasiPaksuusInput', 'variInput',
             'kynnysInput', 'jarjestelmaInput', 'lisatInput',

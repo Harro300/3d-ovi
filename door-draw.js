@@ -235,10 +235,18 @@
             parts.push(hatch45(leaf.panel, 18));
         }
         if (leaf.glass) {
-            parts.push(glassBend(leaf.glass, leaf.hingeSide));
+            var panes = leaf.panes && leaf.panes.length ? leaf.panes : [leaf.glass];
+            (leaf.bars || []).forEach(function (b) {
+                parts.push(rect(b, stroke(SW)));
+            });
+            panes.forEach(function (p) {
+                parts.push(glassBend(p, leaf.hingeSide));
+                if (leaf.active && (panes.length === 1 || p.h >= 240)) {
+                    parts.push(dimInsideV(p, Math.round(p.h), leaf.hingeSide));
+                }
+            });
             if (leaf.active) parts.push(handMark(leaf.glass, leaf.hingeSide));
-            parts.push(dimInsideH(leaf.glass, Math.round(leaf.glass.w)));
-            if (leaf.active) parts.push(dimInsideV(leaf.glass, Math.round(leaf.glass.h), leaf.hingeSide));
+            parts.push(dimInsideH(panes[0], Math.round(leaf.glass.w)));
         }
         return parts.join('');
     }
@@ -304,8 +312,21 @@
             var gy1 = Math.min(layout.glass.y + layout.glass.h, y1);
             var gt = Math.min(layout.glassT || 12, d * 0.22);
             var gx = (d - gt) / 2;
-            parts.push(line(gx, gy0, gx, gy1, stroke(SW_GLASS)));
-            parts.push(line(gx + gt, gy0, gx + gt, gy1, stroke(SW_GLASS)));
+            var first = (layout.leaves || [])[0];
+            var spans = first && first.panes && first.panes.length
+                ? first.panes.map(function (p) { return [p.y, p.y + p.h]; })
+                : [[layout.glass.y, layout.glass.y + layout.glass.h]];
+            spans.forEach(function (sp) {
+                var a = Math.max(sp[0], gy0);
+                var b = Math.min(sp[1], gy1);
+                if (b <= a) return;
+                parts.push(line(gx, a, gx, b, stroke(SW_GLASS)));
+                parts.push(line(gx + gt, a, gx + gt, b, stroke(SW_GLASS)));
+            });
+            (first && first.bars || []).forEach(function (bar) {
+                parts.push(line(4, bar.y, d - 4, bar.y, thin));
+                parts.push(line(4, bar.y + bar.h, d - 4, bar.y + bar.h, thin));
+            });
         }
         var sideLeaf = (layout.leaves || []).filter(function (l) { return l.active; })[0];
         var hinges = (sideLeaf && sideLeaf.hinges) || [];
@@ -367,20 +388,22 @@
             '<g class="door-plan" transform="translate(0,' + PLAN_DY + ')">' + planView(layout) + '</g>';
     }
 
-    function group(layout, originX, originY) {
-        var h = layout.frame.h * SCALE;
+    function group(layout, originX, originY, scale) {
+        var s = scale || SCALE;
+        var h = layout.frame.h * s;
         var extraLeft = 3;
         var tx = originX + extraLeft;
         var ty = originY + h;
         return '<g class="door-elevation" transform="translate(' + tx + ',' + ty +
-            ') scale(' + SCALE + ',' + (-SCALE) + ')">' + assembly(layout) + '</g>';
+            ') scale(' + s + ',' + (-s) + ')">' + assembly(layout) + '</g>';
     }
 
-    function sizeMm(layout) {
+    function sizeMm(layout, scale) {
+        var s = scale || SCALE;
         var d = layout.depth || 60;
         return {
-            w: (layout.frame.w + SIDE_DX + d + 70) * SCALE,
-            h: (layout.frame.h - PLAN_DY + d + 12) * SCALE
+            w: (layout.frame.w + SIDE_DX + d + 70) * s,
+            h: (layout.frame.h - PLAN_DY + d + 12) * s
         };
     }
 

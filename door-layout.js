@@ -55,7 +55,23 @@
         } else {
             panel = inner;
         }
+        var panes = [];
+        var bars = [];
+        if (glass) {
+            var barH = root.DoorSpec.VALO.RUUTU_PUITE;
+            var top = gy + gh;
+            spec.ruutukorkeudet.forEach(function (ph, i) {
+                if (i > 0) {
+                    bars.push(box(gx, top - barH, gw, barH));
+                    top -= barH;
+                }
+                panes.push(box(gx, top - ph, gw, ph));
+                top -= ph;
+            });
+        }
         return {
+            panes: panes,
+            bars: bars,
             outer: outer,
             inner: inner,
             transom: null,

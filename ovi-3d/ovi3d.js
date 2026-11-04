@@ -25,6 +25,8 @@ const KAYNTI_LOCK_MIN = 695;
 const KAYNTI_LOCK_MAX = 895;
 const SYVYYS = 60;
 const LASI_T = 18;
+const RUUTU_PUITE = 70;
+const RUUTU_MAX = 4;
 
 const RAL = {
     "1000": "#beb87f", "1001": "#c2b078", "1002": "#c6a664", "1013": "#eae6ca", "1014": "#e1cc4f",
@@ -423,6 +425,8 @@ function captureDoor() {
         leveys: $("leveys").value,
         korkeus: $("korkeus").value,
         potku: $("potku").value,
+        ruutuja: ruutuja(),
+        ruutukorkeudet: readPanes(),
         vari: $("vari").value,
         ral: $("ral").value
     };
@@ -455,6 +459,8 @@ function specFor2d() {
         valoaukko_w: s.kaynti,
         valoaukko_h: s.valoH,
         lisaovi_valoaukko_w: s.pair ? s.lisa : 0,
+        ruutuja: s.ruutuja,
+        ruutukorkeudet: s.ruutuja > 1 ? s.panes : [],
         lukko_h: 1000,
         lasi: { paksuus: LASI_T, enabled: true },
         vari: RAL[ral] ? "RAL " + ral : ""
@@ -511,6 +517,14 @@ function applyDoor(saved) {
     $("leveys").value = saved.leveys ?? "";
     $("korkeus").value = saved.korkeus ?? "";
     $("potku").value = saved.potku ?? "";
+    setRuutuja(saved.ruutuja ?? 1);
+    const savedPanes = Array.isArray(saved.ruutukorkeudet) ? saved.ruutukorkeudet : [];
+    if (savedPanes.length === ruutuja() && savedPanes.every((h) => Number(h) > 0)) {
+        savedPanes.forEach((h, i) => setNum("ruutu" + (i + 1), Number(h)));
+    } else {
+        splitPanes();
+    }
+    syncPaneUi();
     if (saved.vari) $("vari").value = saved.vari;
     $("ral").value = saved.ral || "";
     setDoorType(saved.tyyppi === "kayntiovi" ? "kayntiovi" : "pariovi");
@@ -543,6 +557,8 @@ function readSpec() {
         potku: num("potku"),
         pair: isPair(),
         vasen: hand() === "vasen",
+        ruutuja: ruutuja(),
+        panes: ruutuja() > 1 ? readPanes() : [num("valoH")],
         vari: $("vari").value
     };
 }
@@ -587,7 +603,77 @@ function validate(s) {
     }
     if (s.kaynti < GLASS_MIN || s.valoH < GLASS_MIN) return "Valoaukko on liian pieni.";
     if (s.potku < KICK_MIN) return "Potkupellin korkeus on vähintään 40 mm.";
+    if (s.ruutuja > 1) {
+        if (s.panes.some((h) => h == null)) return "Täytä kaikki mittakentät.";
+        if (s.panes.some((h) => h < GLASS_MIN)) return "Ruudun korkeus on vähintään " + GLASS_MIN + " mm.";
+    }
     return "";
+}
+
+const PANE_NAMES = {
+    2: ["Ylempi ruutu", "Alempi ruutu"],
+    3: ["Ylin ruutu", "Keskiruutu", "Alin ruutu"],
+    4: ["Ylin ruutu", "2. ruutu", "3. ruutu", "Alin ruutu"]
+};
+
+function readPanes() {
+    const out = [];
+    for (let i = 1; i <= ruutuja(); i++) out.push(num("ruutu" + i));
+    return out;
+}
+
+function splitPanes() {
+    const valoH = num("valoH");
+    if (valoH == null || ruutuja() < 2) return;
+    paneHeights(valoH, ruutuja()).forEach((h, i) => setNum("ruutu" + (i + 1), h));
+}
+
+// Oven korkeuden tai potkun muutos menee alimpaan ruutuun.
+function fitBottomPane() {
+    const n = ruutuja();
+    if (n < 2) return;
+    const valoH = num("valoH");
+    const upper = readPanes().slice(0, -1);
+    if (valoH == null) return;
+    if (upper.some((h) => h == null)) {
+        splitPanes();
+        return;
+    }
+    setNum("ruutu" + n, valoH - upper.reduce((a, b) => a + b, 0) - (n - 1) * RUUTU_PUITE);
+}
+
+function panesToValoH() {
+    const panes = readPanes();
+    if (panes.some((h) => h == null)) return;
+    setNum("valoH", panes.reduce((a, b) => a + b, 0) + (panes.length - 1) * RUUTU_PUITE);
+}
+
+function syncPaneUi() {
+    const n = ruutuja();
+    $("valoHLabel").hidden = n > 1;
+    for (let i = 1; i <= RUUTU_MAX; i++) {
+        $("ruutu" + i + "Label").hidden = i > n || n < 2;
+        if (n > 1 && i <= n) $("ruutu" + i + "Nimi").textContent = PANE_NAMES[n][i - 1];
+    }
+}
+
+function ruutuja() {
+    const picked = document.querySelector('input[name="ruutuja"]:checked');
+    return clampRuutuja(picked ? picked.value : 1);
+}
+
+function ruutuText(n) {
+    return n === 1 ? "1 ruutu" : n + " ruutua";
+}
+
+function setRuutuja(n) {
+    setRadio("ruutuja", String(clampRuutuja(n)));
+    $("lisavalinnatArvo").textContent = ruutuText(ruutuja());
+}
+
+function closeLisavalinnat() {
+    $("lisavalinnatValikko").hidden = true;
+    $("lisavalinnatNappi").setAttribute("aria-expanded", "false");
 }
 
 function miterHit(ox, oy, ix, iy) {
@@ -643,6 +729,18 @@ function miteredFrame(ox, oy, ow, oh, left, right, bottom, top) {
     ];
 }
 
+function clampRuutuja(n) {
+    const v = Math.round(Number(n));
+    return v >= 1 ? Math.min(RUUTU_MAX, v) : 1;
+}
+
+function paneHeights(valoH, ruutuja) {
+    const n = clampRuutuja(ruutuja);
+    const total = valoH - (n - 1) * RUUTU_PUITE;
+    const each = Math.floor(total / n);
+    return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - each * (n - 1) : each));
+}
+
 function leafGeom(spec, gx, gw, leftW, rightW) {
     const glassTop = spec.korkeus - KARMI - RAKO - PUITE;
     const gy = glassTop - spec.valoH;
@@ -652,7 +750,17 @@ function leafGeom(spec, gx, gw, leftW, rightW) {
     const oy = outerBottom;
     const ow = gw + leftW + rightW;
     const oh = glassTop + PUITE - outerBottom;
+    const crossbars = [];
+    let top = glassTop;
+    spec.panes.forEach((ph, i) => {
+        if (i > 0) {
+            crossbars.push([gx, top - RUUTU_PUITE, gw, RUUTU_PUITE]);
+            top -= RUUTU_PUITE;
+        }
+        top -= ph;
+    });
     return {
+        crossbars,
         bars: miteredFrame(ox, oy, ow, oh, leftW, rightW, bottomRail, PUITE),
         plate: [ox + 5, oy, ow - 10, gy - oy],
         glass: [gx, gy, gw, spec.valoH],
@@ -993,6 +1101,9 @@ function addLeaf(group, leaf, m) {
     addGlassSpacer(group, gx, gy, gw, gh, m.spacer);
     addBead(group, gx, gy, gw, gh, m.steel, -0.35, -0.35 - glassFront);
     addBead(group, gx, gy, gw, gh, m.steel, glassFront - LASI_T, SYVYYS - 0.6 + glassFront - LASI_T);
+    leaf.crossbars.forEach(([bx, by, bw, bh]) => {
+        addBox(group, bx, by, bw, bh, leafFront, SYVYYS - 1.4, m.steel, true);
+    });
 }
 
 function buildDoor(spec, m) {
@@ -2136,10 +2247,21 @@ document.getElementById("mitat").addEventListener("input", (event) => {
     else if (event.target.id === "oviaukko") applyOpeningInput(false);
     else if (event.target.name === "tyyppi") applyTypeChange();
     else if (event.target.name === "katisyys") syncOpeningHand();
-    else {
+    else if (event.target.name === "ruutuja") {
+        setRuutuja(ruutuja());
+        splitPanes();
+        syncPaneUi();
+        closeLisavalinnat();
+        $("lisavalinnatNappi").focus();
+    } else if (/^ruutu\d$/.test(event.target.id)) {
+        typeError = "";
+        panesToValoH();
+        applySync("valoH");
+    } else {
         typeError = "";
         applySync(event.target.id);
     }
+    if (event.target.name !== "ruutuja" && !/^ruutu\d$/.test(event.target.id)) fitBottomPane();
     syncing = false;
     if (event.target.type === "number" || event.target.id === "oviaukko") scheduleRebuild();
     else rebuild();
@@ -2149,12 +2271,29 @@ $("oviaukko").addEventListener("blur", () => {
     if (syncing) return;
     syncing = true;
     applyOpeningInput(true);
+    fitBottomPane();
     syncing = false;
     clearTimeout(rebuildTimer);
     rebuild();
 });
 
 $("siirra").addEventListener("click", siirra);
+
+$("lisavalinnatNappi").addEventListener("click", () => {
+    const open = $("lisavalinnatValikko").hidden;
+    $("lisavalinnatValikko").hidden = !open;
+    $("lisavalinnatNappi").setAttribute("aria-expanded", String(open));
+    if (open) document.querySelector('input[name="ruutuja"]:checked')?.focus();
+});
+document.addEventListener("pointerdown", (event) => {
+    if (!$("lisavalinnat").contains(event.target)) closeLisavalinnat();
+});
+$("lisavalinnat").addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || $("lisavalinnatValikko").hidden) return;
+    event.preventDefault();
+    closeLisavalinnat();
+    $("lisavalinnatNappi").focus();
+});
 
 document.querySelectorAll('input[name="nakymatila"]').forEach((input) => {
     input.addEventListener("change", () => setView(input.value));

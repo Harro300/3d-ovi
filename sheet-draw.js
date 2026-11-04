@@ -1,12 +1,25 @@
 /**
- * A3-vaaka-arkki: speksi vasemmalle, naamakuva oikealle.
+ * A4-vaaka-arkki: speksi vasemmalle, naamakuva oikealle.
  * window.DoorSheet
  */
 (function (root) {
     'use strict';
 
-    var SHEET_W = 420;
-    var SHEET_H = 297;
+    var SHEET_W = 297;
+    var SHEET_H = 210;
+    var DENOMS = [10, 15, 20, 25, 30];
+    var DOOR_X = 108;
+    var DOOR_Y = 10;
+    var DOOR_W = SHEET_W - DOOR_X - 10;
+    var DOOR_H = SHEET_H - 20;
+
+    function scaleDenom(layout) {
+        for (var i = 0; i < DENOMS.length; i++) {
+            var size = root.DoorDraw.sizeMm(layout, 1 / DENOMS[i]);
+            if (size.w <= DOOR_W && size.h <= DOOR_H) return DENOMS[i];
+        }
+        return DENOMS[DENOMS.length - 1];
+    }
 
     function esc(s) {
         return root.DoorDraw.esc(s);
@@ -78,7 +91,7 @@
             });
         });
         var rowH = 5.8;
-        var lastY = 280;
+        var lastY = SHEET_H - 17;
         var startY = lastY - Math.max(0, specRows.length - 1) * rowH;
         var minY = y + 12;
         if (startY < minY) startY = minY;
@@ -93,14 +106,11 @@
 
     function svg(layout) {
         var spec = layout.spec;
-        var doorSize = root.DoorDraw.sizeMm(layout);
-        var doorAreaX = 108;
-        var doorAreaY = 10;
-        var doorAreaW = SHEET_W - doorAreaX - 10;
-        var doorAreaH = SHEET_H - 20;
-        var ox = doorAreaX + Math.max(0, (doorAreaW - doorSize.w) / 2);
-        var oy = doorAreaY + Math.max(0, (doorAreaH - doorSize.h) / 2);
-        var door = root.DoorDraw.group(layout, ox, oy);
+        var scale = 1 / scaleDenom(layout);
+        var doorSize = root.DoorDraw.sizeMm(layout, scale);
+        var ox = DOOR_X + Math.max(0, (DOOR_W - doorSize.w) / 2);
+        var oy = DOOR_Y + Math.max(0, (DOOR_H - doorSize.h) / 2);
+        var door = root.DoorDraw.group(layout, ox, oy, scale);
         var body = '<rect x="0" y="0" width="' + SHEET_W + '" height="' + SHEET_H +
             '" fill="#fff"/>' +
             '<rect x="2" y="2" width="' + (SHEET_W - 4) + '" height="' + (SHEET_H - 4) +
@@ -121,6 +131,7 @@
     root.DoorSheet = {
         SHEET_W: SHEET_W,
         SHEET_H: SHEET_H,
+        scaleDenom: scaleDenom,
         svg: svg,
         documentSvg: documentSvg,
         specLines: specLines
