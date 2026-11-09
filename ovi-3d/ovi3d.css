@@ -317,6 +317,66 @@ label.tyyppi-nappi {
     outline-offset: 1px;
 }
 
+.tyyppi-valinta.yksi {
+    grid-template-columns: 1fr;
+}
+
+.ikkuna-ryhma {
+    display: contents;
+}
+
+.ikkuna-otsikko {
+    grid-column: span 2;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 13px;
+    border-top: 1px solid var(--viiva);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--teksti);
+}
+
+.ikkuna-poista {
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--teksti-3);
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.ikkuna-poista:hover {
+    color: var(--teksti);
+}
+
+.ikkuna-poista:focus-visible {
+    outline: 2px solid rgba(210, 191, 152, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.ikkunapaikat {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.ikkunapaikat .ikkunapaikka {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: auto;
+    background: rgba(14, 15, 18, 0.84);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
 .lisavalinnat {
     position: relative;
 }

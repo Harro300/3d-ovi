@@ -89,6 +89,20 @@
         return { paksuus: 18, enabled: fallbackEnabled !== false };
     }
 
+    var IKKUNA_PUTKI = 72.5;
+    var IKKUNA_SIVUT = ['yla', 'vasen', 'oikea'];
+
+    // Pane size per attached window: vasen/oikea give the pane width, yla the pane height.
+    function normalizeIkkunat(raw) {
+        var src = isObj(raw) ? raw : {};
+        var out = {};
+        IKKUNA_SIVUT.forEach(function (side) {
+            var n = num(src[side], NaN);
+            out[side] = src[side] == null || src[side] === '' || !isFinite(n) ? null : n;
+        });
+        return out;
+    }
+
     function hasKick(s) {
         return num(s && s.potkulevy_h, 0) >= VALO.KICK_MIN;
     }
@@ -191,6 +205,7 @@
             valoaukko_h: num(s.valoaukko_h, 0),
             lisaovi_valoaukko_w: Math.max(0, num(s.lisaovi_valoaukko_w, 0)),
             ruutuja: normalizeRuutuja(s.ruutuja),
+            ikkunat: normalizeIkkunat(s.ikkunat),
             lasi: normalizeLasi(s.lasi, true),
             vari: str(s.vari),
             kynnys: str(s.kynnys),
@@ -262,6 +277,9 @@
         if (s.lasi.enabled && s.ruutuja > 1 && s.ruutukorkeudet.some(function (h) { return h < 80; })) {
             errors.push('Ruudun korkeus on vähintään 80 mm.');
         }
+        if (IKKUNA_SIVUT.some(function (side) { return s.ikkunat[side] != null && s.ikkunat[side] < 80; })) {
+            errors.push('Ikkunan ruutu on vähintään 80 mm.');
+        }
         if (pair && s.lisaovi_valoaukko_w < 80) {
             errors.push('Lisäoven valoaukko on liian pieni.');
         }
@@ -291,6 +309,8 @@
     root.DoorSpec = {
         VALO: VALO,
         FACE: FACE,
+        IKKUNA_PUTKI: IKKUNA_PUTKI,
+        IKKUNA_SIVUT: IKKUNA_SIVUT,
         DEFAULTS: DEFAULTS,
         normalize: normalize,
         validate: validate,

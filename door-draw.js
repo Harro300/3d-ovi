@@ -19,6 +19,8 @@
     var SIDE_DX = 340;
     var WIDTH_DY = -78;
     var PLAN_DY = -210;
+    var TOTAL_DY = 90;
+    var TOTAL_DX = 125;
 
     function esc(s) {
         return String(s == null ? '' : s)
@@ -251,6 +253,26 @@
         return parts.join('');
     }
 
+    function mm(n) {
+        return String(Math.round(n * 10) / 10);
+    }
+
+    function boundsOf(layout) {
+        return layout.bounds || { x0: 0, x1: layout.frameOuter.w, h: layout.frameOuter.h };
+    }
+
+    function drawWindow(win) {
+        var g = win.glass;
+        var cx = g.x + g.w / 2;
+        var cy = g.y + g.h / 2;
+        var thin = stroke(SW_THIN);
+        return miterFrame(win.outer, g, SW_OUTER) +
+            line(cx - 30, cy, cx + 30, cy, thin) +
+            line(cx, cy - 30, cx, cy + 30, thin) +
+            dimInsideH(g, mm(g.w)) +
+            dimInsideV(g, mm(g.h), 'oikea');
+    }
+
     function kickOf(layout) {
         var h = layout.dims.kickH;
         var g = layout.glass;
@@ -271,14 +293,31 @@
             parts.push(hingeMark(h));
         });
 
+        var windows = layout.windows || [];
+        windows.forEach(function (win) {
+            parts.push(drawWindow(win));
+        });
+        var b = boundsOf(layout);
+
         parts.push(dimH(f.x, f.x + f.w, WIDTH_DY, layout.dims.overallW, f.y));
-        var kick = kickOf(layout);
-        var heightX = f.x + f.w + HEIGHT_DX;
-        if (kick) {
-            parts.push(dimV(f.x + f.w + KICK_DX, kick.y, kick.y + kick.h,
-                layout.dims.kickH, f.x + f.w));
+        windows.forEach(function (win) {
+            if (win.side === 'yla') return;
+            parts.push(dimH(win.outer.x, win.outer.x + win.outer.w, WIDTH_DY, mm(win.outer.w), win.outer.y));
+        });
+        if (b.x0 < f.x || b.x1 > f.x + f.w) {
+            parts.push(dimH(b.x0, b.x1, b.h + TOTAL_DY, mm(b.x1 - b.x0), b.h));
         }
-        parts.push(dimV(heightX, f.y, f.y + f.h, layout.dims.overallH, f.x + f.w));
+        var kick = kickOf(layout);
+        var right = b.x1;
+        var heightX = right + HEIGHT_DX;
+        if (kick) {
+            parts.push(dimV(right + KICK_DX, kick.y, kick.y + kick.h, layout.dims.kickH, right));
+        }
+        parts.push(dimV(heightX, f.y, f.y + f.h, layout.dims.overallH, right));
+        if (b.h > f.y + f.h) {
+            parts.push(dimV(heightX, f.y + f.h, b.h, mm(b.h - f.h), right));
+            parts.push(dimV(heightX + TOTAL_DX, f.y, b.h, mm(b.h), right));
+        }
         return parts.join('');
     }
 
@@ -335,6 +374,18 @@
             parts.push(line(-2, h.y - 11, 8, h.y - 11, thin));
             parts.push(line(-2, h.y + 11, 8, h.y + 11, thin));
         });
+        var top = (layout.windows || []).filter(function (w) { return w.side === 'yla'; })[0];
+        if (top) {
+            var P = root.DoorSpec.IKKUNA_PUTKI;
+            var t0 = top.outer.y;
+            var t1 = top.outer.y + top.outer.h;
+            var tgt = Math.min(layout.glassT || 12, d * 0.22);
+            var tgx = (d - tgt) / 2;
+            parts.push(rect({ x: 0, y: t0, w: d, h: t1 - t0 }, stroke(SW_OUTER)));
+            parts.push(endBlock(3, t1 - P, d - 6, P - 3));
+            parts.push(line(tgx, t0, tgx, t1 - P, stroke(SW_GLASS)));
+            parts.push(line(tgx + tgt, t0, tgx + tgt, t1 - P, stroke(SW_GLASS)));
+        }
         return parts.join('');
     }
 
@@ -378,11 +429,25 @@
                 parts.push(rect({ x: W - 2, y: d - 14, w: 10, h: 10 }, stroke(SW)));
             }
         });
+        var P = root.DoorSpec.IKKUNA_PUTKI;
+        (layout.windows || []).forEach(function (win) {
+            if (win.side === 'yla') return;
+            var x0 = win.outer.x;
+            var x1 = win.outer.x + win.outer.w;
+            var gt = Math.min(layout.glassT || 12, d * 0.22);
+            var gy = (d - gt) / 2;
+            var tube = win.side === 'vasen' ? x0 : x1 - P;
+            var g0 = win.side === 'vasen' ? x0 + P : x0;
+            var g1 = win.side === 'vasen' ? x1 : x1 - P;
+            parts.push(rect({ x: tube, y: 0, w: P, h: d }, stroke(SW)));
+            parts.push(line(g0, gy, g1, gy, stroke(SW_GLASS)));
+            parts.push(line(g0, gy + gt, g1, gy + gt, stroke(SW_GLASS)));
+        });
         return parts.join('');
     }
 
     function assembly(layout) {
-        var sideX = layout.frameOuter.w + SIDE_DX;
+        var sideX = boundsOf(layout).x1 + SIDE_DX;
         return elevation(layout) +
             '<g class="door-side" transform="translate(' + sideX + ',0)">' + sideView(layout) + '</g>' +
             '<g class="door-plan" transform="translate(0,' + PLAN_DY + ')">' + planView(layout) + '</g>';
@@ -390,9 +455,10 @@
 
     function group(layout, originX, originY, scale) {
         var s = scale || SCALE;
-        var h = layout.frame.h * s;
+        var b = boundsOf(layout);
+        var h = (b.h + (b.x0 < 0 || b.x1 > layout.frame.w ? TOTAL_DY + 40 : 0)) * s;
         var extraLeft = 3;
-        var tx = originX + extraLeft;
+        var tx = originX + extraLeft - b.x0 * s;
         var ty = originY + h;
         return '<g class="door-elevation" transform="translate(' + tx + ',' + ty +
             ') scale(' + s + ',' + (-s) + ')">' + assembly(layout) + '</g>';
@@ -401,9 +467,11 @@
     function sizeMm(layout, scale) {
         var s = scale || SCALE;
         var d = layout.depth || 60;
+        var b = boundsOf(layout);
+        var totalRow = b.x0 < 0 || b.x1 > layout.frame.w ? TOTAL_DY + 40 : 0;
         return {
-            w: (layout.frame.w + SIDE_DX + d + 70) * s,
-            h: (layout.frame.h - PLAN_DY + d + 12) * s
+            w: (b.x1 - b.x0 + SIDE_DX + d + 70) * s,
+            h: (b.h + totalRow - PLAN_DY + d + 12) * s
         };
     }
 

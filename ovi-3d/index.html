@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jansen Janisol</title>
-    <link rel="stylesheet" href="ovi3d.css?v=44">
+    <link rel="stylesheet" href="ovi3d.css?v=45">
 </head>
 <body>
     <div class="tausta" aria-hidden="true"></div>
@@ -61,6 +61,16 @@
                             </label>
                         </div>
                     </div>
+                    <div class="tyyppi-kentta">
+                        <span class="tyyppi-otsikko">Ikkuna</span>
+                        <div class="tyyppi-valinta yksi" role="group" aria-label="Ikkuna">
+                            <label class="tyyppi-nappi">
+                                <input type="checkbox" id="lisaaIkkuna">
+                                <span>Lisää ikkuna</span>
+                            </label>
+                        </div>
+                        <span class="vihje" id="ikkunaVihje" hidden>Valitse näkymästä, mille sivulle ikkuna tulee.</span>
+                    </div>
                 </section>
                 <section class="osio">
                     <h2><span>02</span>Mitat</h2>
@@ -75,6 +85,21 @@
                         <label id="ruutu3Label" hidden><span id="ruutu3Nimi">3. ruutu</span><span class="mm"><input id="ruutu3" type="number" min="80" step="1"></span></label>
                         <label id="ruutu4Label" hidden><span id="ruutu4Nimi">Alin ruutu</span><span class="mm"><input id="ruutu4" type="number" min="80" step="1"></span></label>
                         <label>Potkupellin korkeus<span class="mm"><input id="potku" type="number" min="40" step="1" value="300"></span></label>
+                        <div class="ikkuna-ryhma" id="ikkunaYla" hidden>
+                            <div class="ikkuna-otsikko"><span>Yläikkuna</span><button type="button" class="ikkuna-poista" data-sivu="yla">Poista</button></div>
+                            <label>Ruudun leveys<span class="mm"><input id="ikkunaYlaW" type="number" readonly tabindex="-1"></span></label>
+                            <label>Ruudun korkeus<span class="mm"><input id="ikkunaYlaH" type="number" min="80" step="1"></span></label>
+                        </div>
+                        <div class="ikkuna-ryhma" id="ikkunaVasen" hidden>
+                            <div class="ikkuna-otsikko"><span>Vasen ikkuna</span><button type="button" class="ikkuna-poista" data-sivu="vasen">Poista</button></div>
+                            <label>Ruudun leveys<span class="mm"><input id="ikkunaVasenW" type="number" min="80" step="1"></span></label>
+                            <label>Ruudun korkeus<span class="mm"><input id="ikkunaVasenH" type="number" readonly tabindex="-1"></span></label>
+                        </div>
+                        <div class="ikkuna-ryhma" id="ikkunaOikea" hidden>
+                            <div class="ikkuna-otsikko"><span>Oikea ikkuna</span><button type="button" class="ikkuna-poista" data-sivu="oikea">Poista</button></div>
+                            <label>Ruudun leveys<span class="mm"><input id="ikkunaOikeaW" type="number" min="80" step="1"></span></label>
+                            <label>Ruudun korkeus<span class="mm"><input id="ikkunaOikeaH" type="number" readonly tabindex="-1"></span></label>
+                        </div>
                     </div>
                 </section>
                 <section class="osio">
@@ -117,6 +142,11 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>
                     </button>
                     <button type="button" class="jono-nappi" id="aukkoMuokkaa">Muokkaa merkintöjä</button>
+                </div>
+                <div class="ikkunapaikat" id="ikkunapaikat">
+                    <button type="button" class="jono-nappi ikkunapaikka" data-sivu="vasen" hidden>Vasen</button>
+                    <button type="button" class="jono-nappi ikkunapaikka" data-sivu="oikea" hidden>Oikea</button>
+                    <button type="button" class="jono-nappi ikkunapaikka" data-sivu="yla" hidden>Ylä</button>
                 </div>
                 <div class="tieto" id="tieto"></div>
                 <div class="ohje">Vedä: pyöritä · Rulla: zoomaa · Oikea painike: siirrä</div>
@@ -161,6 +191,6 @@
         }
     }
     </script>
-    <script type="module" src="ovi3d.js?v=44"></script>
+    <script type="module" src="ovi3d.js?v=46"></script>
 </body>
 </html>

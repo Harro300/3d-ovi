@@ -92,6 +92,46 @@
         };
     }
 
+    // The door frame is the shared member on the joined side, so that side gets no tube of its own.
+    function computeWindows(spec) {
+        var P = root.DoorSpec.IKKUNA_PUTKI;
+        var w = spec.ikkunat;
+        var W = spec.leveys;
+        var H = spec.korkeus;
+        var topH = w.yla ? w.yla + P : 0;
+        var totalH = H + topH;
+        var out = [];
+        if (w.yla) {
+            out.push({
+                side: 'yla',
+                outer: box(0, H, W, topH),
+                glass: box(P, H, W - 2 * P, w.yla)
+            });
+        }
+        if (w.vasen) {
+            out.push({
+                side: 'vasen',
+                outer: box(-(w.vasen + P), 0, w.vasen + P, totalH),
+                glass: box(-w.vasen, P, w.vasen, totalH - 2 * P)
+            });
+        }
+        if (w.oikea) {
+            out.push({
+                side: 'oikea',
+                outer: box(W, 0, w.oikea + P, totalH),
+                glass: box(W, P, w.oikea, totalH - 2 * P)
+            });
+        }
+        return {
+            list: out,
+            bounds: {
+                x0: w.vasen ? -(w.vasen + P) : 0,
+                x1: W + (w.oikea ? w.oikea + P : 0),
+                h: totalH
+            }
+        };
+    }
+
     function compute(raw) {
         var spec = root.DoorSpec.normalize(raw);
         var VALO = root.DoorSpec.VALO;
@@ -156,6 +196,7 @@
             h: 90
         };
 
+        var windows = computeWindows(spec);
         var glassW = first.glass ? Math.round(first.glass.w) : 0;
         var glassH = first.glass ? Math.round(first.glass.h) : 0;
 
@@ -181,6 +222,8 @@
             gap: gap,
             pair: pair,
             meeting: meeting,
+            windows: windows.list,
+            bounds: windows.bounds,
             clear: { w: first.outer.w, h: first.outer.h },
             dims: {
                 overallW: W,

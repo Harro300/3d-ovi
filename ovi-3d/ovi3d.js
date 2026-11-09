@@ -27,6 +27,9 @@ const SYVYYS = 60;
 const LASI_T = 18;
 const RUUTU_PUITE = 70;
 const RUUTU_MAX = 4;
+const IKKUNA = 72.5;
+const IKKUNA_ALKU = 400;
+const IKKUNA_SIVUT = { yla: "Yla", vasen: "Vasen", oikea: "Oikea" };
 
 const RAL = {
     "1000": "#beb87f", "1001": "#c2b078", "1002": "#c6a664", "1013": "#eae6ca", "1014": "#e1cc4f",
@@ -98,6 +101,57 @@ function num(id) {
 
 function setNum(id, n) {
     $(id).value = String(Math.round(n));
+}
+
+function windowOn(side) {
+    return !$("ikkuna" + IKKUNA_SIVUT[side]).hidden;
+}
+
+function paneInput(side) {
+    return "ikkuna" + IKKUNA_SIVUT[side] + (side === "yla" ? "H" : "W");
+}
+
+// Only the free pane dimension is stored; the other one follows the door.
+function readWindows() {
+    const out = {};
+    Object.keys(IKKUNA_SIVUT).forEach((side) => {
+        out[side] = windowOn(side) ? num(paneInput(side)) : null;
+    });
+    return out;
+}
+
+function captureWindows() {
+    const out = {};
+    Object.keys(IKKUNA_SIVUT).forEach((side) => {
+        out[side] = windowOn(side) ? $(paneInput(side)).value : null;
+    });
+    return out;
+}
+
+function setWindow(side, value) {
+    $("ikkuna" + IKKUNA_SIVUT[side]).hidden = value == null;
+    if (value != null) $(paneInput(side)).value = value;
+}
+
+function syncWindowFields() {
+    const leveys = num("leveys");
+    const korkeus = num("korkeus");
+    const yla = windowOn("yla") ? num("ikkunaYlaH") : null;
+    $("ikkunaYlaW").value = leveys ? String(leveys - 2 * IKKUNA) : "";
+    const sideH = korkeus ? String(korkeus + (yla ? yla + IKKUNA : 0) - 2 * IKKUNA) : "";
+    $("ikkunaVasenH").value = sideH;
+    $("ikkunaOikeaH").value = sideH;
+}
+
+// Assembly outline in door millimetres: the door spans 0..leveys, side windows extend past it.
+function assemblyBounds(s) {
+    const w = s.ikkunat || {};
+    const part = (v) => (v ? v + IKKUNA : 0);
+    return {
+        x0: -part(w.vasen),
+        x1: (s.leveys || 1480) + part(w.oikea),
+        h: (s.korkeus || 2310) + part(w.yla)
+    };
 }
 
 function applyRal() {
@@ -427,6 +481,7 @@ function captureDoor() {
         potku: $("potku").value,
         ruutuja: ruutuja(),
         ruutukorkeudet: readPanes(),
+        ikkunat: captureWindows(),
         vari: $("vari").value,
         ral: $("ral").value
     };
@@ -461,6 +516,7 @@ function specFor2d() {
         lisaovi_valoaukko_w: s.pair ? s.lisa : 0,
         ruutuja: s.ruutuja,
         ruutukorkeudet: s.ruutuja > 1 ? s.panes : [],
+        ikkunat: s.ikkunat,
         lukko_h: 1000,
         lasi: { paksuus: LASI_T, enabled: true },
         vari: RAL[ral] ? "RAL " + ral : ""
@@ -504,6 +560,8 @@ function applyDoor(saved) {
     syncing = true;
     openingError = "";
     typeError = "";
+    const savedWindows = (saved && saved.ikkunat) || {};
+    Object.keys(IKKUNA_SIVUT).forEach((side) => setWindow(side, savedWindows[side] ?? null));
     if (!saved) {
         $("oviaukko").value = "";
         clearLock();
@@ -559,6 +617,7 @@ function readSpec() {
         vasen: hand() === "vasen",
         ruutuja: ruutuja(),
         panes: ruutuja() > 1 ? readPanes() : [num("valoH")],
+        ikkunat: readWindows(),
         vari: $("vari").value
     };
 }
@@ -606,6 +665,15 @@ function validate(s) {
     if (s.ruutuja > 1) {
         if (s.panes.some((h) => h == null)) return "Täytä kaikki mittakentät.";
         if (s.panes.some((h) => h < GLASS_MIN)) return "Ruudun korkeus on vähintään " + GLASS_MIN + " mm.";
+    }
+    const windowLabel = {
+        yla: "Yläikkunan ruudun korkeus",
+        vasen: "Vasemman ikkunan ruudun leveys",
+        oikea: "Oikean ikkunan ruudun leveys"
+    };
+    for (const side of Object.keys(windowLabel)) {
+        if (!windowOn(side)) continue;
+        if (!(s.ikkunat[side] >= GLASS_MIN)) return windowLabel[side] + " on vähintään " + GLASS_MIN + " mm.";
     }
     return "";
 }
@@ -1106,11 +1174,50 @@ function addLeaf(group, leaf, m) {
     });
 }
 
+function polyArea(pts) {
+    let a = 0;
+    pts.forEach((p, i) => {
+        const q = pts[(i + 1) % pts.length];
+        a += p[0] * q[1] - q[0] * p[1];
+    });
+    return Math.abs(a / 2);
+}
+
+// The side against the door has no tube of its own; the door frame is the shared member.
+function addWindow(group, ox, oy, ow, oh, sides, m) {
+    const [l, r, b, t] = sides;
+    miteredFrame(ox, oy, ow, oh, l, r, b, t)
+        .filter((pts) => pts.length >= 3 && polyArea(pts) > 1)
+        .forEach((pts) => addExtrude(group, pts, 0, SYVYYS, m.steel, true));
+    const gx = ox + l;
+    const gy = oy + b;
+    const gw = ow - l - r;
+    const gh = oh - b - t;
+    const glassFront = -22;
+    addBox(group, gx, gy, gw, gh, glassFront, LASI_T, m.glass).castShadow = false;
+    addGlassSpacer(group, gx, gy, gw, gh, m.spacer);
+    addBead(group, gx, gy, gw, gh, m.steel, -0.35, -0.35 - glassFront);
+    addBead(group, gx, gy, gw, gh, m.steel, glassFront - LASI_T, SYVYYS - 0.6 + glassFront - LASI_T);
+}
+
+// Sides are visual; a left-handed door is mirrored afterwards, so its local sides are swapped here.
+function addWindows(group, spec, m) {
+    const w = spec.ikkunat;
+    const localLeft = spec.vasen ? w.oikea : w.vasen;
+    const localRight = spec.vasen ? w.vasen : w.oikea;
+    const topH = w.yla ? w.yla + IKKUNA : 0;
+    const totalH = spec.korkeus + topH;
+    if (w.yla) addWindow(group, 0, spec.korkeus, spec.leveys, topH, [IKKUNA, IKKUNA, 0, IKKUNA], m);
+    if (localLeft) addWindow(group, -(localLeft + IKKUNA), 0, localLeft + IKKUNA, totalH, [IKKUNA, 0, IKKUNA, IKKUNA], m);
+    if (localRight) addWindow(group, spec.leveys, 0, localRight + IKKUNA, totalH, [0, IKKUNA, IKKUNA, IKKUNA], m);
+}
+
 function buildDoor(spec, m) {
     const group = new THREE.Group();
     miteredFrame(0, 0, spec.leveys, spec.korkeus, KARMI, KARMI, KARMI, KARMI).forEach((pts) => {
         addExtrude(group, pts, 0, SYVYYS, m.steel, true);
     });
+    addWindows(group, spec, m);
     addShadowGaps(group, spec, m.gap);
     const sidePad = W_KAYNTI / 2;
     if (spec.pair) {
@@ -1850,11 +1957,14 @@ function disposeGeometry(object) {
 let wallSet = null;
 let stageKey = "";
 
-function updateStage(spec) {
-    const cx = spec.leveys / 2000;
+function updateStage(doorSpec) {
+    const a = assemblyBounds(doorSpec);
+    const spec = { ...doorSpec, leveys: a.x1 - a.x0, korkeus: a.h };
+    const ox = a.x0 / 1000;
+    const cx = ox + spec.leveys / 2000;
     const cy = spec.korkeus / 2000;
     const own = isOwnFacade();
-    const keyNow = [viewMode, wallType, spec.leveys, spec.korkeus, spec.pair, spec.vasen,
+    const keyNow = [viewMode, wallType, spec.leveys, spec.korkeus, ox, spec.pair, spec.vasen,
         own ? facade.active + ":" + facadeVersion : ""].join("|");
     if (keyNow === stageKey) return false;
     stageKey = keyNow;
@@ -1867,6 +1977,7 @@ function updateStage(spec) {
     }
     if (viewMode === "seina") {
         wallSet = isEntrance() ? buildEntranceSet(spec) : own ? buildFacadeSet(spec) : buildWallSet(spec);
+        wallSet.position.x = ox;
         scene.add(wallSet);
     }
     const night = isEntrance();
@@ -2015,20 +2126,21 @@ function invalidate() {
 }
 
 function cameraPose() {
-    const s = readSpec();
-    const L = (s.leveys || 1480) / 1000;
-    const H = (s.korkeus || 2310) / 1000;
+    const a = assemblyBounds(readSpec());
+    const ox = a.x0 / 1000;
+    const L = (a.x1 - a.x0) / 1000;
+    const H = a.h / 1000;
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     if (isOwnFacade()) {
         const fitOH = (H * 0.5) / tanHalf * 2.1;
         const fitOW = (L * 0.5) / (tanHalf * camera.aspect) * 3;
-        const target = new THREE.Vector3(L / 2, H * 0.55, 0);
+        const target = new THREE.Vector3(ox + L / 2, H * 0.55, 0);
         const dir = new THREE.Vector3(-0.18, 0.03, 1).normalize();
         return { target, position: target.clone().addScaledVector(dir, Math.max(fitOH, fitOW)) };
     }
     if (isEntrance()) {
         const RH = entranceHeight(H);
-        const target = new THREE.Vector3(L / 2, 1.75, 0.7);
+        const target = new THREE.Vector3(ox + L / 2, 1.75, 0.7);
         const fitEH = ((RH + 1.8) * 0.5) / tanHalf * 1.15;
         const fitEW = ((L + 5) * 0.5) / (tanHalf * camera.aspect) * 1.1;
         const dir = new THREE.Vector3(-0.22, 0.02, 1).normalize();
@@ -2037,7 +2149,7 @@ function cameraPose() {
     const fitH = (H * 0.5) / tanHalf * 1.34;
     const fitW = (L * 0.5) / (tanHalf * camera.aspect) * 1.45;
     const dist = Math.max(fitH, fitW) * (viewMode === "seina" ? 1.25 : 1);
-    const target = new THREE.Vector3(L / 2, H * 0.47, -0.03);
+    const target = new THREE.Vector3(ox + L / 2, H * 0.47, -0.03);
     const dir = new THREE.Vector3(-0.2, -0.02, 1).normalize();
     return { target, position: target.clone().addScaledVector(dir, dist) };
 }
@@ -2071,6 +2183,8 @@ function stepFlight(now) {
 }
 
 function rebuild() {
+    syncWindowFields();
+    $("ikkunaVihje").hidden = !$("lisaaIkkuna").checked;
     const spec = readSpec();
     const waiting = isOwnFacade() && !openingLock;
     const dim = waiting ? "" : validate(spec);
@@ -2239,8 +2353,67 @@ function saveImage() {
     link.click();
 }
 
+const SPOT_PUSH = 36;
+const spotA = new THREE.Vector3();
+const spotB = new THREE.Vector3();
+
+// Add-window buttons sit just outside the middle of each door edge, following the camera.
+function placeSpots() {
+    const s = readSpec();
+    const show = $("lisaaIkkuna").checked && viewMode === "studio" && door && door.visible
+        && s.leveys > 0 && s.korkeus > 0;
+    const L = s.leveys / 1000;
+    const H = s.korkeus / 1000;
+    const edges = { vasen: [0, H / 2, -1, 0], oikea: [L, H / 2, 1, 0], yla: [L / 2, H, 0, 1] };
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    document.querySelectorAll(".ikkunapaikka").forEach((btn) => {
+        const side = btn.dataset.sivu;
+        const [x, y, dx, dy] = edges[side];
+        spotA.set(x, y, 0).project(camera);
+        spotB.set(x + dx * 0.1, y + dy * 0.1, 0).project(camera);
+        btn.hidden = !show || windowOn(side) || spotA.z > 1;
+        if (btn.hidden) return;
+        const px = (spotA.x + 1) / 2 * w;
+        const py = (1 - spotA.y) / 2 * h;
+        let vx = (spotB.x - spotA.x) * w;
+        let vy = (spotA.y - spotB.y) * h;
+        const len = Math.hypot(vx, vy) || 1;
+        vx /= len;
+        vy /= len;
+        btn.style.transform = "translate(" + (px + vx * SPOT_PUSH) + "px, " + (py + vy * SPOT_PUSH) + "px) translate(-50%, -50%)";
+    });
+}
+
+function addWindowAt(side) {
+    setWindow(side, String(IKKUNA_ALKU));
+    clearTimeout(rebuildTimer);
+    rebuild();
+    frameCamera(true);
+    $(paneInput(side)).focus({ preventScroll: true });
+}
+
+function removeWindow(side) {
+    setWindow(side, null);
+    clearTimeout(rebuildTimer);
+    rebuild();
+    frameCamera(true);
+}
+
+document.querySelectorAll(".ikkunapaikka").forEach((btn) => {
+    btn.addEventListener("click", () => addWindowAt(btn.dataset.sivu));
+});
+document.querySelectorAll(".ikkuna-poista").forEach((btn) => {
+    btn.addEventListener("click", () => removeWindow(btn.dataset.sivu));
+});
+
 document.getElementById("mitat").addEventListener("input", (event) => {
     if (syncing) return;
+    if (event.target.id === "lisaaIkkuna" || event.target.id.startsWith("ikkuna")) {
+        if (event.target.type === "number") scheduleRebuild();
+        else rebuild();
+        return;
+    }
     syncing = true;
     if (event.target.id === "ral") applyRal();
     else if (event.target.id === "vari") matchRalFromColor();
@@ -2344,6 +2517,7 @@ renderer.setAnimationLoop((now) => {
         setDraft(false);
         dirty = true;
     }
+    if (dirty) placeSpots();
     if (!dirty || compiling) return;
     if (moving) setDraft(true);
     dirty = false;

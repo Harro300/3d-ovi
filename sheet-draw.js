@@ -56,6 +56,10 @@
             add(lasi);
         }
         add(spec.vari);
+        var ikkunat = spec.ikkunat || {};
+        if (ikkunat.yla) add('Yläikkuna ' + ikkunat.yla);
+        if (ikkunat.vasen) add('Vasen ikkuna ' + ikkunat.vasen);
+        if (ikkunat.oikea) add('Oikea ikkuna ' + ikkunat.oikea);
         add(String(spec.leveys));
         add(String(spec.korkeus));
         add(String(spec.potkulevy_h));

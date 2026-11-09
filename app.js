@@ -130,6 +130,11 @@
             lisaovi_valoaukko_w: val('lisaValoInput'),
             ruutuja: val('ruutujaInput'),
             ruutukorkeudet: paneCount() > 1 ? readPanes() : [],
+            ikkunat: {
+                yla: val('ikkunaYlaInput'),
+                vasen: val('ikkunaVasenInput'),
+                oikea: val('ikkunaOikeaInput')
+            },
             potkulevy_h: val('potkulevyInput'),
             lukko_h: val('lukkoInput'),
             lasi: {
@@ -162,6 +167,9 @@
             setVal('ruutu' + i + 'Input', s.ruutuja > 1 && i <= s.ruutuja ? s.ruutukorkeudet[i - 1] : '');
         }
         syncPaneUi();
+        setVal('ikkunaYlaInput', s.ikkunat.yla);
+        setVal('ikkunaVasenInput', s.ikkunat.vasen);
+        setVal('ikkunaOikeaInput', s.ikkunat.oikea);
         setVal('potkulevyInput', s.potkulevy_h);
         setVal('lukkoInput', s.lukko_h);
         if ($('lasiInput')) $('lasiInput').checked = !!s.lasi.enabled;
@@ -358,6 +366,7 @@
         data.spec.valoaukko_h = form.valoaukko_h;
         data.spec.korkeus = form.korkeus;
         data.spec.potkulevy_h = form.potkulevy_h;
+        data.spec.ikkunat = DoorSpec.normalize(form).ikkunat;
         if (data.restore3d) {
             data.restore3d.ruutuja = form.ruutuja;
             var panes = form.ruutukorkeudet.map(Number);
